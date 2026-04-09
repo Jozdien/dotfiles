@@ -1,0 +1,14 @@
+{
+  "cleanupPeriodDays": 99999,
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Read",
+      "WebFetch"
+    ],
+    "ask": [
+      "Bash(rm -r*)"
+    ]
+  },
+  "effortLevel": "high"
+}
