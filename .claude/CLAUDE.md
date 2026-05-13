@@ -39,6 +39,14 @@ Here are some lower-level recommendations:
 - Whenever relevant, update the README of the repository you're working in. A good README is concise, but comprehensive.
 - Make commits for every major change that you make. Exercise your own judgement on what constitutes a major change, but in general try not to go overboard.
 
+## When doing LLM research
+
+Sometimes you'll be helping with LLM research. By LLM research, I mean anything from running evaluations of some kind on a model to doing training runs, for example SFT or RL on a model through an API or locally. In these cases I want you to default to saving as much information as you can.
+
+For example, with an evaluation I would prefer if you saved the exact outputs, inputs, etc., from every data point that there is, in case I want to use them for debugging or visualization later, or want to do some analysis later on. With training as well, I obviously want to save the SFT data somewhere where it can be easily accessed in the future. With RL, I want to save the RL rollouts, advantages given to each input in a group, and so on and so on. Basically I want as much data as possible without going extremely overboard. If there is a large RL run, I'm totally fine with just saving all the rollouts, saving all the advantages and stuff.
+
+Also, if there is an LLM judge: the judge prompts, judge outputs. If not, if there's a programmatic scorer or something similar, then just the whatever the equivalent of that would be. I'm sure, in context, you'd be able to figure out what the ideal setup is for this. In general I prefer saving more information. 
+
 ## Package Management Commands
 
 Use these commands:

@@ -1,142 +1,213 @@
 ---
-name: tinker-api
-description: Use whenever the user mentions Tinker, tinker-cookbook, or wants to fine-tune/train/sample from open-weight LLMs (Qwen, Llama, DeepSeek, etc.) via the Tinker API. Covers SL, RL (PPO, GRPO, DPO, RLHF), custom losses, renderers, checkpointing, logprobs, vision models, and the OpenAI-compatible inference endpoint.
+name: tinker
+description: "Use this skill whenever the user wants to train, fine-tune, or do inference with language models using the Tinker API. Trigger on any mention of 'tinker' or when the user wants to do LoRA fine-tuning, supervised fine-tuning (SFT), reinforcement learning (RL), DPO, RLHF, or preference learning on open-weight models like Llama, Qwen, DeepSeek, Kimi, or GPT-OSS using a managed training API."
 ---
 
 # Tinker API
 
-Tinker is a training API for LLM fine-tuning from Thinking Machines Lab. You write a training loop that runs on your CPU-only machine (data, environment, loss function). Tinker handles distributed GPU training on the backend. It supports LoRA fine-tuning of open-weight models (Qwen3, Llama3, DeepSeek, etc.), including vision-language models.
+Tinker is a managed training API from [Thinking Machines Lab](https://thinkingmachines.ai/tinker/). You write a Python loop on your CPU—your data, loss function, training logic—and Tinker runs the GPU computation across distributed clusters. It uses LoRA fine-tuning exclusively (default rank 32).
 
-**Docs:** https://tinker-docs.thinkingmachines.ai
-**LLM-friendly docs:** https://tinker-docs.thinkingmachines.ai/llms-full.txt
-**Cookbook repo:** https://github.com/thinking-machines-lab/tinker-cookbook
+**Docs:** https://tinker-docs.thinkingmachines.ai/tinker/
+**Cookbook:** https://tinker-docs.thinkingmachines.ai/cookbook/
+**Tutorials:** https://tinker-docs.thinkingmachines.ai/tutorials/
+**GitHub:** [SDK](https://github.com/thinking-machines-lab/tinker) · [Cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
 
 ## Installation
 
 ```bash
-# The core SDK
-uv add tinker
-
-# The cookbook (clone + editable install, NOT a pip/uv package)
-git clone https://github.com/thinking-machines-lab/tinker-cookbook.git
-cd tinker-cookbook
-uv pip install -e .
+uv pip install tinker            # SDK only (import tinker + CLI)
+uv pip install tinker-cookbook    # Cookbook (includes SDK)
+export TINKER_API_KEY="..."      # Get from https://tinker-console.thinkingmachines.ai
 ```
 
-**Important:** `tinker-cookbook` is NOT available as a standalone package on PyPI. You cannot `uv add tinker-cookbook` or `pip install tinker-cookbook`. You must clone the repo and do an editable install (`uv pip install -e .`). The cookbook provides renderers, hyperparameter utilities, training loop abstractions, example recipes, and evaluation tooling.
+## Two-Layer Architecture
 
-Set the API key: `export TINKER_API_KEY=<your key>` (get one from https://tinker-console.thinkingmachines.ai).
+**`tinker` (SDK):** Low-level primitives—`forward_backward`, `optim_step`, `sample`, `save_state`. Full control over every step. Use for custom loops or novel algorithms.
 
-## Core Architecture
+**`tinker-cookbook`:** Higher-level abstractions—`SupervisedDataset`, `ChatDatasetBuilder`, `RLDatasetBuilder`, `Env`/`EnvGroupBuilder`, `Renderer`, `Completer`, eval framework, configs. Use for standard SFT/RL/DPO/RLHF workflows.
 
-Tinker has three main client objects:
-
-1. **`ServiceClient`** — Entry point. Creates training and sampling clients. Near-instant.
-2. **`TrainingClient`** — Corresponds to a fine-tuned model. Runs `forward_backward`, `optim_step`, saves/loads checkpoints. Creation takes a moment (allocates GPU resources).
-3. **`SamplingClient`** — Generates text from a base model or fine-tuned checkpoint.
-
-Plus a **`RestClient`** for listing checkpoints, downloading weights, publishing models, etc.
-
-## Quick Reference: Minimal Training + Sampling
+## Core API
 
 ```python
 import tinker
 from tinker import types
-import numpy as np
 
-# 1. Connect
 service_client = tinker.ServiceClient()
-
-# 2. Create a training client (LoRA fine-tuning)
 training_client = service_client.create_lora_training_client(
-    base_model="Qwen/Qwen3-30B-A3B",  # or any supported model
-    rank=32,  # LoRA rank, default 32
+    base_model="Qwen/Qwen3-8B", rank=32
 )
+sampling_client = service_client.create_sampling_client(base_model="Qwen/Qwen3-8B")
 tokenizer = training_client.get_tokenizer()
+```
 
-# 3. Prepare data as Datum objects
-#    Each Datum has: model_input (tokens) + loss_fn_inputs (targets, weights, etc.)
+### forward_backward — compute gradients
+
+**Token shifting is critical:** For next-token prediction, targets must be shifted by 1 from inputs. Weights must also be shifted.
+
+```python
 prompt_tokens = tokenizer.encode("Translate: hello\nResult:", add_special_tokens=True)
-completion_tokens = tokenizer.encode(" hola\n\n", add_special_tokens=False)
-tokens = prompt_tokens + completion_tokens
-weights = [0]*len(prompt_tokens) + [1]*len(completion_tokens)
+completion_tokens = tokenizer.encode(" hola", add_special_tokens=False)
+all_tokens = prompt_tokens + completion_tokens
+all_weights = [0]*len(prompt_tokens) + [1]*len(completion_tokens)
 
-input_tokens = tokens[:-1]
-target_tokens = tokens[1:]  # Next-token prediction: targets are shifted by 1
-weights = weights[1:]
+input_tokens = all_tokens[:-1]       # everything except last
+target_tokens = all_tokens[1:]       # everything except first (shifted by 1)
+weights = all_weights[1:]            # also shifted
 
 datum = types.Datum(
     model_input=types.ModelInput.from_ints(tokens=input_tokens),
-    loss_fn_inputs=dict(weights=weights, target_tokens=target_tokens),
+    loss_fn_inputs=dict(weights=weights, target_tokens=target_tokens)
 )
-
-# 4. Train
-for step in range(10):
-    fwdbwd_future = training_client.forward_backward([datum], "cross_entropy")
-    optim_future = training_client.optim_step(types.AdamParams(learning_rate=1e-4))
-    fwdbwd_result = fwdbwd_future.result()
-    optim_result = optim_future.result()
-
-    logprobs = np.concatenate([o['logprobs'].tolist() for o in fwdbwd_result.loss_fn_outputs])
-    w = np.array(weights)
-    print(f"Step {step}: loss = {-np.dot(logprobs, w) / w.sum():.4f}")
-
-# 5. Sample from trained model
-sampling_client = training_client.save_weights_and_get_sampling_client(name="my-model")
-prompt = types.ModelInput.from_ints(tokenizer.encode("Translate: goodbye\nResult:"))
-params = types.SamplingParams(max_tokens=20, temperature=0.0, stop=["\n"])
-result = sampling_client.sample(prompt=prompt, sampling_params=params, num_samples=4).result()
-for seq in result.sequences:
-    print(tokenizer.decode(seq.tokens))
+future = await training_client.forward_backward_async(data=[datum], loss_fn="cross_entropy")
+result = await future.result_async()
+# result.loss — scalar loss
+# result.loss_fn_outputs — list of per-datum dicts with 'logprobs' (for computing custom metrics)
 ```
 
-## Key Concepts
-
-### Datum (Training Data Format)
-
-Every training example is a `types.Datum` with:
-- `model_input`: a `ModelInput` (token sequence, possibly with image chunks for VLMs)
-- `loss_fn_inputs`: a dict of tensors consumed by the loss function (e.g., `target_tokens`, `weights`, `logprobs`, `advantages`)
-
-Tensors can be numpy arrays or torch tensors.
-
-### Futures (Non-Blocking API)
-
-Most Tinker methods return a `Future`. The request is submitted immediately; call `.result()` to block until done.
-
-**Critical performance pattern:** Submit `forward_backward` and `optim_step` before waiting on either. Tinker operates on ~10s clock cycles — if you don't have a request queued when a cycle starts, you miss it.
+### optim_step — update weights
 
 ```python
-# GOOD: overlap requests
-fwdbwd_future = training_client.forward_backward(data, "cross_entropy")
-optim_future = training_client.optim_step(adam_params)  # submit immediately
-fwdbwd_result = fwdbwd_future.result()  # now wait
-optim_result = optim_future.result()
-
-# BAD: sequential (wastes clock cycles)
-fwdbwd_result = training_client.forward_backward(data, "cross_entropy").result()
-optim_result = training_client.optim_step(adam_params).result()
+await (await training_client.optim_step_async(
+    types.AdamParams(learning_rate=1e-4, beta1=0.9, beta2=0.95, eps=1e-8)
+)).result_async()
 ```
 
-### Async API
-
-Every method has an `_async` variant for asyncio:
+For recommended learning rates (LoRA needs ~10-100x higher LR than full fine-tuning):
 ```python
-future = await client.forward_backward_async(data, loss_fn)
-result = await future  # double-await pattern
+from tinker_cookbook.hyperparam_utils import get_lr
+lr = get_lr("Qwen/Qwen3-8B")  # returns recommended LR for this model
 ```
 
-### Loss Functions
+### sample — generate text
 
-Built-in losses (pass as string to `forward_backward`):
+```python
+prompt = types.ModelInput.from_ints(tokenizer.encode("The capital of France is"))
+params = types.SamplingParams(max_tokens=50, temperature=0.7, stop=["\n"])
+result = await sampling_client.sample_async(prompt=prompt, num_samples=1, sampling_params=params)
+print(tokenizer.decode(result.sequences[0].tokens))
+```
+
+### Logprobs
+
+```python
+# Prompt logprobs (for RL scoring)
+logprobs = await sampling_client.compute_logprobs_async(prompt)
+
+# Top-k logprobs per position (for distillation)
+result = await sampling_client.sample_async(
+    prompt, num_samples=1,
+    sampling_params=types.SamplingParams(max_tokens=1),
+    include_prompt_logprobs=True, topk_prompt_logprobs=5,
+)
+# result.topk_prompt_logprobs: [None, [(token_id, logprob), ...], ...]
+```
+
+### save_state / load_state — checkpointing
+
+```python
+# Save weights → get sampling client for eval
+sampling_client = training_client.save_weights_and_get_sampling_client(name="checkpoint-1")
+
+# Save full state (weights + optimizer) for resuming
+training_client.save_state(name="step-100")
+
+# Resume with optimizer state
+training_client = await service_client.create_training_client_from_state_with_optimizer_async(
+    path="tinker://run-id/weights/step-100"
+)
+```
+
+## Clock Cycles and Pipelining
+
+Tinker's backend runs on clock cycles — each cycle does a `forward_backward` + `optim_step`. If you don't have a request queued when a cycle starts, you miss it. The practical consequence:
+
+```python
+# GOOD: overlap requests — submit both before awaiting either
+fwdbwd_future = await training_client.forward_backward_async(data, "cross_entropy")
+optim_future = await training_client.optim_step_async(adam_params)  # submit immediately
+fwdbwd_result = await fwdbwd_future.result_async()
+optim_result = await optim_future.result_async()
+
+# BAD: sequential — wastes clock cycles
+fwdbwd_result = (await training_client.forward_backward_async(data, "cross_entropy")).result_async()
+await fwdbwd_result
+optim_result = (await training_client.optim_step_async(adam_params)).result_async()
+await optim_result
+```
+
+Also: `sample_async(prompt, num_samples=16)` for multiple samples; `asyncio.gather(...)` for parallel prompts. Set `TINKER_SUBPROCESS_SAMPLING=1` to avoid GIL contention during CPU-heavy reward computation.
+
+See [Clock Cycles & Pipelining](https://tinker-docs.thinkingmachines.ai/tinker/under-the-hood/).
+
+## SFT Workflow
+
+Create `TrainingClient` → tokenize examples into `Datum` objects with loss masks → `forward_backward_async(loss_fn="cross_entropy")` → `optim_step_async` → periodically `save_weights_and_get_sampling_client()` to evaluate.
+
+### Using Cookbook Helpers (Recommended)
+
+```python
+from tinker_cookbook.supervised.data import conversation_to_datum
+from tinker_cookbook import renderers, tokenizer_utils, model_info
+
+tokenizer = tokenizer_utils.get_tokenizer("Qwen/Qwen3-8B")
+renderer_name = model_info.get_recommended_renderer_name("Qwen/Qwen3-8B")
+renderer = renderers.get_renderer(renderer_name, tokenizer)
+
+messages = [
+    {"role": "user", "content": "What is 2+2?"},
+    {"role": "assistant", "content": "4."},
+]
+
+# One-liner: messages → Datum
+datum = conversation_to_datum(
+    messages, renderer, max_length=32768,
+    train_on_what=renderers.TrainOnWhat.ALL_ASSISTANT_MESSAGES,
+)
+```
+
+Renderers also provide lower-level methods:
+```python
+model_input, weights = renderer.build_supervised_example(messages)  # tokens + loss weights
+prompt = renderer.build_generation_prompt(messages[:-1])            # for sampling
+stop_sequences = renderer.get_stop_sequences()
+message, success = renderer.parse_response(sampled_tokens)          # parse output back
+```
+
+See [Cookbook SFT](https://tinker-docs.thinkingmachines.ai/cookbook/supervised-learning/), [First SFT tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/basics/first-sft/), [SFT with Config](https://tinker-docs.thinkingmachines.ai/tutorials/cookbook-abstractions/sft-with-config/).
+
+## RL Workflow
+
+1. Create `TrainingClient`
+2. `save_weights_and_get_sampling_client()` → on-policy sampler
+3. Sample rollouts, compute rewards and log-probs (`compute_logprobs_async`)
+4. Build `Datum` with `logprobs` and `advantages` in `loss_fn_inputs`
+5. `forward_backward_async(data, "importance_sampling")` → `optim_step_async`
+6. Repeat from 2
+
+```python
+rl_datum = types.Datum(
+    model_input=types.ModelInput.from_ints(tokens=tokens),
+    loss_fn_inputs=dict(
+        target_tokens=target_tokens, weights=weights,
+        logprobs=sampling_logprobs,  # from the rollout policy
+        advantages=advantages,        # reward - baseline
+    )
+)
+```
+
+The cookbook provides `Env`, `MessageEnv`, `ProblemEnv`, `EnvGroupBuilder`, `RLDatasetBuilder`, and `compute_advantages`. See [Cookbook RL](https://tinker-docs.thinkingmachines.ai/cookbook/rl/), [First RL tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/basics/first-rl/), [Env & EnvGroupBuilder](https://tinker-docs.thinkingmachines.ai/tutorials/cookbook-abstractions/env-and-envgroupbuilder/).
+
+## Loss Functions
+
+Pass as `loss_fn` to `forward_backward_async`. All built-in losses **sum** (not mean) token-level losses over the sequence. Adjust advantages accordingly if you want different aggregation.
 
 | Loss | Use Case | Required `loss_fn_inputs` |
 |------|----------|--------------------------|
-| `"cross_entropy"` | Supervised learning | `target_tokens`, `weights` |
-| `"importance_sampling"` | On-policy RL (REINFORCE) | `target_tokens`, `logprobs` (sampling), `advantages` |
-| `"ppo"` | PPO clipped objective | Same as importance_sampling |
-| `"cispo"` | CISPO (clipped IS for PG) | Same as importance_sampling |
-| `"dro"` | Direct Reward Optimization | Same as importance_sampling |
+| `"cross_entropy"` | SFT — next-token prediction | `target_tokens`, `weights` |
+| `"importance_sampling"` | RL — policy gradient with off-policy correction | `target_tokens`, `logprobs`, `advantages` |
+| `"ppo"` | RL — PPO clipped objective | same as importance_sampling |
+| `"cispo"` | RL — clipped importance sampling, pessimistic objective | same as importance_sampling |
+| `"dro"` | RL — direct reward optimization | same as importance_sampling |
 
 PPO/CISPO accept `loss_fn_config` for clip thresholds:
 ```python
@@ -148,7 +219,8 @@ DRO accepts a `beta` parameter:
 training_client.forward_backward(data, "dro", loss_fn_config={"beta": 0.05})
 ```
 
-**Custom loss functions** via `forward_backward_custom`:
+**Custom loss** via `forward_backward_custom_async`. You provide a Python function that receives logprobs and returns a scalar loss. This costs ~1.5x FLOPs (extra forward pass) and up to ~3x wall time vs built-in losses—important to know for DPO and other custom objectives.
+
 ```python
 def my_loss(data, logprobs):
     loss = ...  # arbitrary differentiable function of logprobs
@@ -156,238 +228,163 @@ def my_loss(data, logprobs):
 
 training_client.forward_backward_custom(data, my_loss)
 ```
-This costs ~1.5x FLOPs (extra forward pass) and up to 3x wall time vs built-in losses.
 
-### Renderers (Chat Templates for Training)
+Math details: https://tinker-docs.thinkingmachines.ai/tinker/losses/
 
-Tinker's renderers (from `tinker_cookbook`) convert message lists to token sequences with per-token loss weights. They handle the full lifecycle: supervised data prep, generation prompts, response parsing.
+## Preference Learning (DPO / RLHF)
+
+**DPO:** `forward_backward_custom_async` with DPO loss. Uses `Comparison` objects (chosen/rejected pairs). Start with `dpo_beta=0.1`, LR ~1e-5. See [DPO Guide](https://tinker-docs.thinkingmachines.ai/cookbook/preferences/dpo-guide/).
+
+**RLHF:** Three-stage pipeline: (1) SFT, (2) reward model, (3) RL against reward model. The cookbook's `incorporate_kl_penalty` can add a KL term to the reward (mathematically correct alternative to GRPO-style KL regularization in the loss). See [RLHF Example](https://tinker-docs.thinkingmachines.ai/cookbook/preferences/rlhf-example/).
+
+Tutorial: https://tinker-docs.thinkingmachines.ai/tutorials/advanced/dpo-preferences/
+
+## Renderers and Completers
+
+**Renderers** bridge chat-format data to token sequences—chat templates, loss masking, vision inputs. Use `model_info.get_recommended_renderer_name(model)` to pick the right one. **Mismatched renderers silently degrade training.** Default renderers produce tokens identical to HuggingFace `apply_chat_template`—important if you plan to use the OpenAI-compatible endpoint for inference. See [Rendering tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/core-concepts/rendering/).
+
+**Completers** abstract sampling policies. `TinkerTokenCompleter` for token-level, `TinkerMessageCompleter` for message-level chat. See [Completers tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/core-concepts/completers/).
+
+## Evaluation
 
 ```python
-from tinker_cookbook import renderers, tokenizer_utils, model_info
-
-tokenizer = tokenizer_utils.get_tokenizer("Qwen/Qwen3-30B-A3B")
-renderer_name = model_info.get_recommended_renderer_name("Qwen/Qwen3-30B-A3B")
-renderer = renderers.get_renderer(renderer_name, tokenizer)
-
-messages = [
-    {"role": "system", "content": "Be concise."},
-    {"role": "user", "content": "What is 2+2?"},
-    {"role": "assistant", "content": "4."},
-]
-
-# For supervised learning: get tokens + loss weights
-model_input, weights = renderer.build_supervised_example(messages)
-
-# For sampling: get a generation prompt
-prompt = renderer.build_generation_prompt(messages[:-1])
-stop_sequences = renderer.get_stop_sequences()
-
-# Parse sampled tokens back to a message
-message, success = renderer.parse_response(sampled_tokens)
+from tinker_cookbook.eval.benchmarks import run_benchmarks, BenchmarkConfig
+results = await run_benchmarks(
+    ["gsm8k", "mmlu_pro", "ifeval"], sampling_client, renderer,
+    BenchmarkConfig(save_dir="evals/step500"),
+)
 ```
 
-Default renderers produce tokens identical to HuggingFace `apply_chat_template`. This matters if you plan to use the OpenAI-compatible inference endpoint.
+12+ benchmarks: GSM8K, MATH-500, MMLU-Pro, MMLU-Redux, GPQA, IFEval, MBPP, C-Eval, SuperGPQA, IFBench, AIME 2025, AIME 2026. Integrates with Inspect AI. See [Eval docs](https://tinker-docs.thinkingmachines.ai/cookbook/eval/).
 
-### Vision / Multimodal
-
-For VLMs (e.g., `Qwen/Qwen3-VL-30B-A3B-Instruct`), use `ImageChunk` in `ModelInput`:
+## Weight Export and Deployment
 
 ```python
-import requests
-from tinker import types
+from tinker_cookbook.weights import download, build_hf_model, publish_to_hf_hub
 
-image_data = requests.get("https://example.com/image.png").content
+download(rest_client, checkpoint_path, output_dir)          # Download LoRA checkpoint
+build_hf_model(base_model, lora_dir, output_dir)            # Merge LoRA into base model
+publish_to_hf_hub(base_model, lora_dir, repo_id)            # Push to HuggingFace Hub
+```
+
+See [Export to HF](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/export-hf/), [Publish to Hub](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/publish-hub/), [Build LoRA Adapter](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/lora-adapter/).
+
+## Vision (VLM) Support
+
+For VLM models (e.g. Qwen3-VL), use `ImageChunk` directly or the higher-level VLM renderers:
+
+```python
+# Low-level: manual ImageChunk
 model_input = tinker.ModelInput(chunks=[
     types.EncodedTextChunk(tokens=tokenizer.encode("<|im_start|>user\n<|vision_start|>")),
-    types.ImageChunk(data=image_data, format="png"),
-    types.EncodedTextChunk(tokens=tokenizer.encode("<|vision_end|>What is this?<|im_end|>\n<|im_start|>assistant\n")),
+    types.ImageChunk(data=image_bytes, format="png"),
+    types.EncodedTextChunk(tokens=tokenizer.encode("<|vision_end|>Describe this image<|im_end|>\n<|im_start|>assistant\n")),
 ])
-```
 
-Or use the higher-level `Qwen3VLRenderer` / `Qwen3VLInstructRenderer` which handles special tokens automatically:
-
-```python
+# High-level: VLM renderer with Message/ImagePart
 from tinker_cookbook.renderers import Message, TextPart, ImagePart
-
-messages = [
-    Message(role="user", content=[
-        ImagePart(type="image", image="https://example.com/img.png"),
-        TextPart(type="text", text="What is this?"),
-    ])
-]
+messages = [Message(role="user", content=[
+    ImagePart(type="image", image="https://example.com/img.png"),
+    TextPart(type="text", text="What is this?"),
+])]
 prompt = renderer.build_generation_prompt(messages)
 ```
 
-## Saving, Loading, and Checkpoints
+## OpenAI-Compatible API (Beta)
 
-```python
-# Save for sampling (lightweight, weights only)
-sampling_client = training_client.save_weights_and_get_sampling_client(name="step-100")
+Tinker provides an OpenAI-compatible inference endpoint for trained models. Use the `tinker://` sampler path as the model name. See [docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/).
 
-# Save full state (weights + optimizer, for resuming training)
-path = training_client.save_state(name="step-100").result().path  # "tinker://..."
+## CLI
 
-# Resume training from full state
-training_client = service_client.create_training_client_from_state_with_optimizer(path)
-
-# Load weights into existing client
-training_client.load_state(path)
+```bash
+tinker run list              # List training runs
+tinker run info <run-id>     # Run details
+tinker checkpoint list       # List checkpoints
+tinker checkpoint download   # Download checkpoint
 ```
 
-## Sampling and Logprobs
-
-```python
-# Basic sampling
-prompt = types.ModelInput.from_ints(tokenizer.encode("Hello"))
-params = types.SamplingParams(max_tokens=100, temperature=0.7, stop=[tokenizer.eos_token_id])
-result = sampling_client.sample(prompt, sampling_params=params, num_samples=8).result()
-
-# Compute logprobs for a given sequence (prefill)
-logprobs = sampling_client.compute_logprobs(prompt).result()
-
-# Top-k logprobs per position
-result = sampling_client.sample(
-    prompt, num_samples=1,
-    sampling_params=types.SamplingParams(max_tokens=1),
-    include_prompt_logprobs=True,
-    topk_prompt_logprobs=5,
-).result()
-# result.topk_prompt_logprobs: list of [(token_id, logprob), ...] per position
-```
-
-## OpenAI-Compatible Inference Endpoint
-
-After saving a sampler checkpoint, you can query it via the OpenAI API:
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://tinker.thinkingmachines.dev/services/tinker-prod/oai/api/v1",
-    api_key=os.getenv("TINKER_API_KEY"),
-)
-
-# Use a tinker:// sampler path as the "model"
-response = client.completions.create(
-    model="tinker://<run-id>/sampler_weights/<checkpoint>",
-    prompt="The capital of France is",
-    max_tokens=50, temperature=0.7,
-)
-# Also supports /chat/completions (uses HF chat template on the server)
-```
-
-## Downloading Weights
-
-```python
-rest_client = service_client.create_rest_client()
-url_response = rest_client.get_checkpoint_archive_url_from_tinker_path(
-    sampling_client.model_path
-).result()
-# url_response.url is a signed download URL
-# Download as .tar.gz:
-import requests
-with open("model.tar.gz", "wb") as f:
-    f.write(requests.get(url_response.url).content)
-```
+Full CLI docs: https://tinker-docs.thinkingmachines.ai/tinker/cli/
 
 ## Available Models
 
-Check programmatically:
+The Tinker ID (passed to `base_model=...`) uses the HuggingFace convention, e.g. `"Qwen/Qwen3-8B"`, `"meta-llama/Llama-3.1-8B"`. Check programmatically:
 ```python
 for m in service_client.get_server_capabilities().supported_models:
     print(m.model_name)
 ```
 
-Key model families (as of the docs): Qwen3 (including Qwen3.5, Qwen3-VL), Llama 3.x, DeepSeek V3.1, OpenAI gpt-oss, Kimi K2. MoE models are more cost-effective. Use Instruction/Hybrid models for task-specific fine-tuning; Base models for full post-training pipelines.
+This list may change—check https://tinker-docs.thinkingmachines.ai/tinker/models/ for the latest.
+
+**Qwen** (16 models): Qwen3.6-35B-A3B (MoE), Qwen3.6-27B, Qwen3.5-4B, Qwen3.5-27B, Qwen3.5-35B-A3B (MoE), Qwen3.5-397B-A17B (MoE), Qwen3-4B-Instruct-2507, Qwen3-8B-Base, Qwen3-8B, Qwen3-30B-A3B-Base (MoE), Qwen3-30B-A3B (MoE), Qwen3-30B-A3B-Instruct-2507 (MoE), Qwen3-VL-30B-A3B-Instruct (MoE, Vision), Qwen3-32B, Qwen3-235B-A22B-Instruct-2507 (MoE), Qwen3-VL-235B-A22B-Instruct (MoE, Vision)
+
+**Llama** (6): Llama-3.2-1B, Llama-3.2-3B, Llama-3.1-8B, Llama-3.1-8B-Instruct, Llama-3.1-70B, Llama-3.3-70B-Instruct
+
+**DeepSeek** (2): DeepSeek-V3.1 (MoE), DeepSeek-V3.1-Base (MoE)
+
+**Moonshot** (3): Kimi-K2-Thinking (MoE), Kimi-K2.5 (MoE), Kimi-K2.6 (MoE)
+
+**OpenAI** (2): GPT-OSS-120B (MoE), GPT-OSS-20B (MoE)
+
+**NVIDIA** (2): Nemotron-3-Nano-30B-A3B-BF16 (MoE), Nemotron-3-Super-120B-A12B-BF16 (MoE)
+
+## Pricing (USD per million tokens)
+
+All prices per million tokens. MoE models priced by active parameters. Storage: $0.10/GB-month. **Prices may change—check the [rate card](https://tinker-console.thinkingmachines.ai/rate-card) or [Tinker homepage](https://thinkingmachines.ai/tinker/) for up-to-date pricing.**
+
+| Model | Context | Prefill | Sample | Train |
+|-------|---------|---------|--------|-------|
+| Nemotron-3-Nano-30B-A3B† | 64K | $0.13 | $0.33 | $0.40 |
+| Nemotron-3-Super-120B-A12B† | 64K | $0.38 | $0.96 | $1.16 |
+| Nemotron-3-Super-120B-A12B† | 256K | $0.76 | $1.92 | $2.32 |
+| Qwen3.6-35B-A3B | 64K | $0.36 | $0.89 | $1.07 |
+| Qwen3.6-27B | 64K | $1.24 | $3.73 | $3.73 |
+| Qwen3.5-35B-A3B | 64K | $0.36 | $0.89 | $1.07 |
+| Qwen3.5-27B | 64K | $1.24 | $3.73 | $3.73 |
+| Qwen3.5-397B-A17B | 64K | $2.00 | $5.00 | $6.00 |
+| Qwen3.5-397B-A17B | 256K | $4.00 | $10.00 | $12.00 |
+
+†Limited-time 50% discount. Pricing for Qwen3-8B, Llama, DeepSeek, Moonshot, and GPT-OSS models: see the rate card.
+
+**Pricing terms:** Prefill = input tokens (forward only). Sample = output tokens (forward + sampling). Train = forward + backward pass.
+
+## Cookbook Recipes
+
+Ready-to-run recipes in `tinker_cookbook/recipes/`, each with a README and expected results: Chat SL (SFT on Tulu3-style data), Math RL (GSM8K), Code RL, Preference (DPO + RLHF pipeline), Tool Use / Search-R1, Prompt Distillation, Model Distillation (single/multi-teacher), Multi-Agent RL (self-play/cross-play), Rubric Grading, Verifiers RL, VLM Classifier, Harbor RL, Agent RL, SDFT, True-Thinking Score.
+
+Full list: https://tinker-docs.thinkingmachines.ai/cookbook/recipes/
 
 ## Hyperparameter Guidance
 
-### Learning Rate
-Most important hyperparameter. Tinker cookbook provides a utility:
-```python
-from tinker_cookbook.hyperparam_utils import get_lr
-lr = get_lr("meta-llama/Llama-3.1-8B")  # returns recommended LR
-```
+**Learning rate:** Most important hyperparameter. Use `from tinker_cookbook.hyperparam_utils import get_lr; lr = get_lr(model_name)`. LoRA requires ~10-100x higher LR than full fine-tuning. Optimal LR does NOT depend on LoRA rank.
 
-LoRA requires ~10-100x higher LR than full fine-tuning (varies by model size). The optimal LR does NOT depend on LoRA rank.
-
-### Batch Size
-Smaller batches (e.g., 128) tend to give better SL fine-tuning performance at the cost of longer training. Aim for ≥100 training steps.
-
-### LoRA Rank
-Default 32. For RL, small ranks work as well as large ranks. For SL on large datasets, increase rank so that LoRA param count ≥ number of completion tokens. Check with:
+**LoRA rank:** Default 32. For RL, small ranks work as well as large. For SL on large datasets, increase rank so that LoRA param count ≥ number of completion tokens:
 ```python
 from tinker_cookbook.hyperparam_utils import get_lora_param_count
 get_lora_param_count("meta-llama/Llama-3.1-8B", lora_rank=32)
 ```
 
-## Cookbook Recipes
+**Batch size:** Smaller batches (e.g. 128) tend to give better SL results at the cost of longer training. Aim for ≥100 training steps.
 
-The cookbook (`tinker_cookbook/recipes/`) has ready-to-run examples. These require the cloned cookbook repo:
+See [SL Hyperparameters](https://tinker-docs.thinkingmachines.ai/tutorials/advanced/sl-hyperparams/), [RL Hyperparameters](https://tinker-docs.thinkingmachines.ai/tutorials/advanced/rl-hyperparams/).
 
-```bash
-# Supervised learning (basic)
-python -m tinker_cookbook.recipes.sl_basic
+## Advanced Topics
 
-# Supervised learning (minimal loop, no abstractions)
-python -m tinker_cookbook.recipes.sl_loop
+These have dedicated tutorial pages:
 
-# RL on GSM8K (math reasoning)
-python -m tinker_cookbook.recipes.rl_basic
+- [Sequence Extension](https://tinker-docs.thinkingmachines.ai/tutorials/advanced/sequence-extension/) — training beyond context length
+- [Multi-Agent RL](https://tinker-docs.thinkingmachines.ai/tutorials/advanced/multi-agent/) — self-play and cross-play
+- [Prompt Distillation](https://tinker-docs.thinkingmachines.ai/tutorials/advanced/prompt-distillation/) — bake system prompts into weights
+- [Custom Environments](https://tinker-docs.thinkingmachines.ai/tutorials/cookbook-abstractions/custom-environment/)
 
-# RL (minimal loop, no abstractions)
-python -m tinker_cookbook.recipes.rl_loop
-```
+## Common Pitfalls
 
-Additional recipes in the repo: chat SL (Tulu3), math reasoning RL, preference learning (RLHF pipeline), tool use, prompt distillation, multi-agent RL.
-
-## Common Patterns
-
-### SL with Renderer (Recommended)
-```python
-from tinker_cookbook.supervised.data import conversation_to_datum
-
-datum = conversation_to_datum(
-    messages,        # list of {"role": ..., "content": ...}
-    renderer,
-    max_length=32768,
-    train_on_what=renderers.TrainOnWhat.ALL_ASSISTANT_MESSAGES,
-)
-```
-
-### RL Training Loop (Sketch)
-```python
-for iteration in range(num_iters):
-    # 1. Sample rollouts
-    sampling_client = training_client.save_weights_and_get_sampling_client(name=str(iteration))
-    prompts = [renderer.build_generation_prompt(msgs) for msgs in batch]
-    rollouts = [sampling_client.sample(p, sampling_params=params, num_samples=group_size) for p in prompts]
-
-    # 2. Score rollouts with reward function
-    rewards = [reward_fn(rollout) for rollout in rollouts]
-
-    # 3. Compute advantages (e.g., group-centered: subtract mean reward per prompt)
-    # 4. Build Datum objects with target_tokens, sampling logprobs, advantages
-    # 5. forward_backward with "ppo" or "importance_sampling"
-    # 6. optim_step
-```
-
-### Computing KL Penalty for Rewards
-The cookbook's `incorporate_kl_penalty` function can add a KL term to the reward (mathematically correct alternative to the GRPO-style KL regularization in the loss).
-
-## Gotchas and Tips
-
-1. **Clock cycles:** Tinker training runs on ~10s clock cycles. Always overlap `forward_backward` and `optim_step` submissions to avoid wasting cycles.
-2. **Sampling is nondeterministic** even at temperature=0 due to batching. Use multiple samples and majority voting for evaluation.
-3. **Token shifting:** For cross-entropy, targets must be shifted by 1 from inputs (next-token prediction). `input_tokens = tokens[:-1]`, `target_tokens = tokens[1:]`, `weights = weights[1:]`.
-4. **Renderer compatibility:** If you'll use the OpenAI-compatible endpoint for inference, use default renderers to ensure token compatibility with HF chat templates.
-5. **LoRA LR scaling:** Don't reuse your full-finetuning LR for LoRA — it needs to be much higher. Use `get_lr()` or `get_lora_lr_over_full_finetune_lr()`.
-6. **All losses sum token-level losses** over sequence length (not mean). Adjust advantages accordingly if you want different aggregation.
-7. **tinker-cookbook is not a standalone package** — clone the repo and `uv pip install -e .`.
-
-## Further Documentation
-
-For the full API reference (all method signatures, types, and parameters), consult:
-- https://tinker-docs.thinkingmachines.ai/llms-full.txt (LLM-optimized single file)
-- https://tinker-docs.thinkingmachines.ai/ (rendered docs site)
-- The `docs/` folder in the tinker-cookbook repo mirrors the docs site
+- **Token shifting:** `input_tokens = tokens[:-1]`, `target_tokens = tokens[1:]`, `weights = weights[1:]`. Forgetting this silently trains on garbage.
+- **Pipelining:** Submit `forward_backward_async` and `optim_step_async` back-to-back before awaiting. Sequential calls waste clock cycles.
+- **Renderer mismatch:** Use `model_info.get_recommended_renderer_name()` — never hardcode. Wrong renderer silently degrades training.
+- **Sampler desync:** Always create a new sampling client after saving weights.
+- **Type construction:** Use `ModelInput.from_ints()`, `conversation_to_datum()`, `renderer.build_supervised_example()` — not manual dicts.
+- **LoRA LR:** Don't reuse full-finetuning LRs for LoRA — it needs to be much higher. Use `get_lr()`.
+- **RL group semantics:** Advantages are centered within each group.
+- **Loss aggregation:** All built-in losses sum (not mean) token-level losses.
+- **Sampling nondeterminism:** Even at temperature=0, sampling can be nondeterministic due to batching. Use multiple samples + majority voting for evals.
+- **Custom loss cost:** `forward_backward_custom` costs ~1.5x FLOPs and up to ~3x wall time vs built-in losses.

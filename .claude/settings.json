@@ -5,12 +5,19 @@
       "Bash",
       "Read",
       "Edit",
-      "WebFetch"
+      "Write",
+      "WebFetch",
+      "Monitor",
+      "mcp__*"
     ],
     "ask": [
-      "Bash(rm -r*)"
+      "Bash(rm -rf *)",
+      "Bash(rm -r *)"
     ]
   },
+  "model": "claude-opus-4-6",
   "effortLevel": "high",
-  "model": "opus"
+  "fastMode": true,
+  "agentPushNotifEnabled": true,
+  "inputNeededNotifEnabled": true
 }
