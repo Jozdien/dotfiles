@@ -329,21 +329,15 @@ This list may change—check https://tinker-docs.thinkingmachines.ai/tinker/mode
 
 ## Pricing (USD per million tokens)
 
-All prices per million tokens. MoE models priced by active parameters. Storage: $0.10/GB-month. **Prices may change—check the [rate card](https://tinker-console.thinkingmachines.ai/rate-card) or [Tinker homepage](https://thinkingmachines.ai/tinker/) for up-to-date pricing.**
+All prices per million tokens. MoE models priced by active parameters. Storage: $0.10/GB-month.
 
 | Model | Context | Prefill | Sample | Train |
 |-------|---------|---------|--------|-------|
-| Nemotron-3-Nano-30B-A3B† | 64K | $0.13 | $0.33 | $0.40 |
-| Nemotron-3-Super-120B-A12B† | 64K | $0.38 | $0.96 | $1.16 |
-| Nemotron-3-Super-120B-A12B† | 256K | $0.76 | $1.92 | $2.32 |
-| Qwen3.6-35B-A3B | 64K | $0.36 | $0.89 | $1.07 |
-| Qwen3.6-27B | 64K | $1.24 | $3.73 | $3.73 |
-| Qwen3.5-35B-A3B | 64K | $0.36 | $0.89 | $1.07 |
-| Qwen3.5-27B | 64K | $1.24 | $3.73 | $3.73 |
-| Qwen3.5-397B-A17B | 64K | $2.00 | $5.00 | $6.00 |
-| Qwen3.5-397B-A17B | 256K | $4.00 | $10.00 | $12.00 |
+| Qwen3-8B (Dense) | 32K | $0.13 | $0.40 | $0.40 |
+| Qwen3-30B-A3B (MoE) | 32K | $0.12 | $0.30 | $0.36 |
+| Llama-3.1-70B (Dense) | 32K | $1.05 | $3.16 | $3.16 |
 
-†Limited-time 50% discount. Pricing for Qwen3-8B, Llama, DeepSeek, Moonshot, and GPT-OSS models: see the rate card.
+For the full pricing table (all models, extended-context variants, discounts), see the **model-pricing** skill. Prices may change—check the [rate card](https://tinker-console.thinkingmachines.ai/rate-card) or [Tinker homepage](https://thinkingmachines.ai/tinker/) for up-to-date pricing.
 
 **Pricing terms:** Prefill = input tokens (forward only). Sample = output tokens (forward + sampling). Train = forward + backward pass.
 
