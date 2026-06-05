@@ -255,7 +255,32 @@ results = await run_benchmarks(
 )
 ```
 
-12+ benchmarks: GSM8K, MATH-500, MMLU-Pro, MMLU-Redux, GPQA, IFEval, MBPP, C-Eval, SuperGPQA, IFBench, AIME 2025, AIME 2026. Integrates with Inspect AI. See [Eval docs](https://tinker-docs.thinkingmachines.ai/cookbook/eval/).
+12+ benchmarks: GSM8K, MATH-500, MMLU-Pro, MMLU-Redux, GPQA, IFEval, MBPP, C-Eval, SuperGPQA, IFBench, AIME 2025, AIME 2026. See [Eval docs](https://tinker-docs.thinkingmachines.ai/cookbook/eval/).
+
+The eval framework has two evaluator types, both async callables returning `dict[str, float]`:
+
+| Evaluator | Receives | Typical metrics | Example |
+|-----------|----------|-----------------|---------|
+| `TrainingClientEvaluator` | `TrainingClient` | NLL, perplexity | Forward pass on held-out data (fast) |
+| `SamplingClientEvaluator` | `SamplingClient` | Accuracy, reward | Generate and grade answers (slower, more informative) |
+
+Wire them into training via `train.Config.evaluator_builders` (a list of zero-arg factories); `eval_every` controls how often they run.
+
+### Inspect AI integration
+
+For standardized benchmarks (MMLU, GSM8K, HumanEval, etc.), the cookbook integrates with [Inspect AI](https://inspect.aisi.org.uk/). The `InspectEvaluator` wraps any Inspect task as a `SamplingClientEvaluator`, so you can benchmark a fine-tuned model against established benchmarks without writing custom evaluation code.
+
+```python
+from tinker_cookbook.eval.run_inspect_evals import Config
+
+# Run Inspect evals standalone
+config = Config(
+    model_path="tinker://run-id/sampler_weights/final",
+    # ... Inspect task configuration ...
+)
+```
+
+See [Evaluations tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/core-concepts/evaluations/#inspect-ai-integration).
 
 ## Weight Export and Deployment
 

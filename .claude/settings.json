@@ -15,9 +15,9 @@
       "Bash(rm -r *)"
     ]
   },
-  "model": "claude-opus-4-6",
+  "model": "claude-opus-4-8",
   "effortLevel": "high",
   "fastMode": true,
-  "agentPushNotifEnabled": true,
-  "inputNeededNotifEnabled": true
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
 }
