@@ -10,10 +10,6 @@
       "WebFetch",
       "Monitor"
     ]
-    // "ask": [
-    //   "Bash(rm -rf *)",
-    //   "Bash(rm -r *)"
-    // ]
   },
   "env": {
     "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
