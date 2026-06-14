@@ -1,5 +1,6 @@
 {
   "cleanupPeriodDays": 99999,
+  "showThinkingSummaries": true,
   "permissions": {
     "defaultMode": "auto",
     "allow": [
