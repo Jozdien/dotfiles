@@ -1,8 +1,9 @@
 {
   "cleanupPeriodDays": 99999,
-  "showThinkingSummaries": true,
+  "env": {
+    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+  },
   "permissions": {
-    "defaultMode": "auto",
     "allow": [
       "Bash",
       "Read",
@@ -10,14 +11,13 @@
       "Write",
       "WebFetch",
       "Monitor"
-    ]
+    ],
+    "defaultMode": "auto"
   },
-  "env": {
-    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
-  },
-  "model": "claude-fable-5",
+  "model": "opus",
   "effortLevel": "high",
   "fastMode": true,
+  "showThinkingSummaries": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true
 }
