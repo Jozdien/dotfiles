@@ -93,7 +93,7 @@ The caption, not the figure, is where the takeaway lives — which is why the fi
 
 ## Figures (the user cares a lot about these)
 
-Paper figures are **tight, titleless, vector, and color-consistent across the whole paper.** Use `figure_style.py` in this skill folder as the matplotlib starting point.
+Paper figures are **tight, titleless, vector, and color-consistent across the whole paper.**
 
 **Where `making-plots` is overridden for papers:**
 
@@ -109,11 +109,57 @@ Paper figures are **tight, titleless, vector, and color-consistent across the wh
 
 **Paper-specific figure rules:**
 
-- **One semantic palette for the entire paper.** A color means the same thing in every figure. The exemplar's convention: red = worst / no-mitigation, dark-blue = robust / safe control, gray = baseline / control, orange = the intervention (SDF). Choose the palette once; reuse everywhere. (Constants live in `figure_style.py`.)
+- **One semantic palette for the entire paper.** A color means the same thing in every figure. The exemplar's convention: red = worst / no-mitigation, dark-blue = robust / safe control, gray = baseline / control, orange = the intervention (SDF). Choose the palette once; reuse everywhere (the snippet below pins it).
 - **Facet to add structure.** When sub-results group naturally, use panels with short **bold panel titles** (e.g. *Direct Elicitation* / *Generality* / *Robustness* / *Judging own rollouts*) sharing one y-axis, rather than one crowded chart.
 - **Legend outside the axes** (to the right) for bar charts; inside interior whitespace for line plots. Use full, descriptive legend entries — embed the actual prompt text when that's what a condition is.
 - **Reference lines with inline labels** for baselines (a dashed horizontal line labeled "Baseline" / "SDF Baseline" directly on the line, not only in the legend).
 - **Composite line figures**: a large main panel (dual y-axis where needed) plus small stacked sub-panels sharing the x-axis, with shaded confidence bands.
+
+**matplotlib starting point (drop at the top of any figure script).** This encodes every override above — vector PDF, embedded TrueType fonts, no on-figure title, despined axes, horizontal grid only, and the fixed semantic palette. Size figures with `figsize` so that text lands at ~caption size after `\includegraphics` scales the PDF to `\textwidth`.
+```python
+import matplotlib.pyplot as plt
+
+# One semantic palette for the WHOLE paper — a color means the same thing everywhere.
+PALETTE = {
+    "baseline":     "#4d4d4d",  # gray   — baseline / control
+    "robust":       "#1f4e79",  # blue   — robust / safe control
+    "intervention": "#d0591b",  # orange — the intervention (e.g. SDF)
+    "worst":        "#b3142a",  # red    — worst case / no mitigation
+    "neutral":      "#e6b800",  # yellow — extra category
+}
+
+TEXTWIDTH_IN = 6.5            # \textwidth of the venue style, in inches
+GOLDEN = 0.618               # default height:width for a single-panel figure
+
+plt.rcParams.update({
+    "pdf.fonttype": 42, "ps.fonttype": 42,   # embed real TrueType, not Type-3
+    "savefig.format": "pdf", "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
+    "figure.titlesize": 0,                    # no suptitle — the caption carries it
+    "axes.titlesize": 9, "axes.labelsize": 9,
+    "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
+    "axes.spines.top": False, "axes.spines.right": False,  # despine
+    "axes.grid": True, "axes.grid.axis": "y",              # light horizontal grid only
+    "grid.color": "#cccccc", "grid.linewidth": 0.6, "grid.alpha": 0.6,
+    "font.size": 9,
+})
+
+# Width fraction f of \textwidth; height defaults to golden ratio of that width.
+def figsize(width_frac=1.0, aspect=GOLDEN):
+    w = TEXTWIDTH_IN * width_frac
+    return (w, w * aspect)
+
+# Dashed baseline reference line, labeled inline on the line (not only in the legend).
+def baseline_line(ax, y, label="Baseline", color=PALETTE["baseline"]):
+    ax.axhline(y, ls="--", lw=1.0, color=color, zorder=0)
+    ax.annotate(label, xy=(0.995, y), xycoords=("axes fraction", "data"),
+                ha="right", va="bottom", fontsize=7, color=color)
+
+# Legend outside the axes, to the right — the default for bar charts.
+def legend_outside(ax, **kw):
+    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
+              frameon=False, **kw)
+```
+Call `plt.savefig("figures/em_bars.pdf")` (format follows the rcParam). For a full-width dense figure use `figsize(1.0)`; for a smaller standalone plot `figsize(0.7)`. Never set a `title=`/`suptitle`; never pass a height that distorts the aspect ratio you chose.
 
 **LaTeX side of figures:**
 ```latex

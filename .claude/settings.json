@@ -16,7 +16,6 @@
   },
   "model": "opus",
   "effortLevel": "high",
-  "fastMode": true,
   "showThinkingSummaries": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true
