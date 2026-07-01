@@ -14,8 +14,9 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "opus",
+  "model": "fable",
   "effortLevel": "high",
+  "fastMode": true,
   "showThinkingSummaries": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true

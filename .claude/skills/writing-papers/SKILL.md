@@ -5,7 +5,7 @@ description: "Use this skill when writing, editing, or revising an academic/rese
 
 # Writing Papers
 
-This skill captures how to write, edit, figure, and build research papers **locally**, in the style of this user's own papers. The canonical exemplar is *Shallow Beliefs* (`~/shallow-beliefs-latex/Shallow_Beliefs__arxiv_/neurips_2026.tex`) — when in doubt, open it and match it.
+This skill captures how to write, edit, figure, and build research papers **locally**, in the style of this user's own papers. The canonical exemplar is *Shallow Beliefs* (`~/paper-editor/shallow-beliefs/neurips_2026.tex`) — when in doubt, open it and match it.
 
 It builds on two other skills and does not repeat them:
 
@@ -18,18 +18,21 @@ The single most important instruction: **treat the user's existing paper as grou
 
 ## Local workflow (technical)
 
-The repo is a standard LaTeX project: one main `.tex`, a `references.bib`, a venue `.sty` file kept in-tree, and a `figures/` directory of **PDF** figures generated elsewhere.
+The user keeps papers in `~/paper-editor/`: each paper is its own subfolder (the project root — main `.tex`, `references.bib`, venue `.sty` in-tree, a `figures/` directory of **PDF** figures generated elsewhere, and optionally a `*.sty.pristine` zero-deviation venue style), and two shared wrapper scripts sit at the top level. Adding a paper = a new sibling folder; no script edits.
 
-**One-shot build** (drives bibtex automatically, reruns to resolve refs):
+**Live-updating build — the "live shell" for writing.** Prefer the wrapper, which auto-detects the main `.tex` (the one with `\documentclass`) and uses `~/.latexmkrc` for the Skim previewer + synctex:
 ```bash
-latexmk -pdf -interaction=nonstopmode main.tex
+~/paper-editor/preview.sh <paper-dir>      # e.g. preview.sh shallow-beliefs
 ```
+It runs `latexmk -pdf -pvc -f` under the hood — watch the source, rebuild on every save. Leave it in a background shell while you edit; a fresh PDF appears seconds after each save. Skim auto-reloads (and `synctex.gz` lets you jump editor↔PDF). Stop with `q` / kill the process. Equivalent raw command from inside the paper folder: `latexmk -pdf -pvc <main>.tex`.
 
-**Live-updating build — the "live shell" for writing.** This watches the source and rebuilds on every save:
+**One-shot build** (drives bibtex automatically, reruns to resolve refs): `latexmk -pdf -interaction=nonstopmode <main>.tex`.
+
+**Pack for Overleaf / arXiv** — source-only zip (no build artifacts), working folder left untouched:
 ```bash
-latexmk -pdf -pvc main.tex
+~/paper-editor/pack-for-overleaf.sh <paper-dir>             # preprint, working .sty
+~/paper-editor/pack-for-overleaf.sh <paper-dir> --pristine  # submission, swaps in *.sty.pristine
 ```
-Pair it with a viewer that auto-reloads the PDF (on macOS, **Skim** does; `latexmk` also writes `synctex.gz` so you can jump editor↔PDF). Leave `-pvc` running in a background shell while you edit; you get a fresh PDF seconds after each save. Stop it with `q` in that shell (or kill the process).
 
 **Clean** intermediates: `latexmk -c` (keep PDF) or `latexmk -C` (also remove PDF).
 
