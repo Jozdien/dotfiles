@@ -1,228 +1,145 @@
 ---
 name: writing-papers
-description: "Use this skill when writing, editing, or revising an academic/research paper — abstracts, introductions, related work, methods, results, discussions, captions, rebuttals — or when working in a LaTeX paper repository (arXiv/NeurIPS/ICML/ICLR style files, \\documentclass, .tex + references.bib). Also use for making publication figures and for compiling or live-previewing LaTeX locally. Complements the `writing` skill (general prose clarity) and the `making-plots` skill (plot mechanics); this skill adds the paper-specific conventions and overrides. Do NOT use for slides, blog posts, or general prose that isn't a paper."
+description: "Use this skill when writing, editing, or revising an academic/research paper — abstracts, introductions, related work, methods, results, discussions, captions, rebuttals — or when working in a LaTeX paper repository (arXiv/NeurIPS/ICML/ICLR style files, \\documentclass, .tex + references.bib). Also use for making publication figures and for compiling LaTeX locally. Complements the `writing` skill (general prose clarity) and the `making-plots` skill (plot mechanics); this skill adds the paper-specific conventions, process, and overrides. Do NOT use for slides, blog posts, or general prose that isn't a paper."
 ---
 
 # Writing Papers
 
-This skill captures how to write, edit, figure, and build research papers **locally**, in the style of this user's own papers. The canonical exemplar is *Shallow Beliefs* (`~/paper-editor/shallow-beliefs/neurips_2026.tex`) — when in doubt, open it and match it.
+This skill is for producing and editing research papers — most often a **first draft written inside an experiments repo** (a `paper/` directory with `main.tex`, `references.bib`, a figure script, and `figures/`), which the user then edits further in `~/paper-editor` (whose own CLAUDE.md supersedes this skill there). Write the draft as if it will be judged as a paper, not as notes: the biggest time-sink downstream is cleaning up habits this skill bans.
 
 It builds on two other skills and does not repeat them:
 
-- **`writing`** — every general clarity rule applies here (characters-as-subjects, old-before-new, kill nominalizations, concision, avoid Claude-voice). Read it first; this skill only adds what is *specific to papers*.
-- **`making-plots`** — the mechanics of building a matplotlib chart. **But it is tuned for slides, and several of its rules are wrong for papers.** See the override table below.
+- **`writing`** — read it first; every clarity rule there applies (expand-then-distill, characters-as-subjects, old-before-new, concision, Claude-voice, the revision diagnostics). This skill adds only what is paper-specific.
+- **`making-plots`** — plot mechanics, but tuned for slides; several of its rules are wrong for papers (override table below).
 
-The single most important instruction: **treat the user's existing paper as ground truth.** Before writing or editing, read the relevant section of `neurips_2026.tex` and copy its register, structure, and figure conventions. The rules below are distilled from it.
-
----
-
-## Local workflow (technical)
-
-The user keeps papers in `~/paper-editor/`: each paper is its own subfolder (the project root — main `.tex`, `references.bib`, venue `.sty` in-tree, a `figures/` directory of **PDF** figures generated elsewhere, and optionally a `*.sty.pristine` zero-deviation venue style), and two shared wrapper scripts sit at the top level. Adding a paper = a new sibling folder; no script edits.
-
-**Live-updating build — the "live shell" for writing.** Prefer the wrapper, which auto-detects the main `.tex` (the one with `\documentclass`) and uses `~/.latexmkrc` for the Skim previewer + synctex:
-```bash
-~/paper-editor/preview.sh <paper-dir>      # e.g. preview.sh shallow-beliefs
-```
-It runs `latexmk -pdf -pvc -f` under the hood — watch the source, rebuild on every save. Leave it in a background shell while you edit; a fresh PDF appears seconds after each save. Skim auto-reloads (and `synctex.gz` lets you jump editor↔PDF). Stop with `q` / kill the process. Equivalent raw command from inside the paper folder: `latexmk -pdf -pvc <main>.tex`.
-
-**One-shot build** (drives bibtex automatically, reruns to resolve refs): `latexmk -pdf -interaction=nonstopmode <main>.tex`.
-
-**Pack for Overleaf / arXiv** — source-only zip (no build artifacts), working folder left untouched:
-```bash
-~/paper-editor/pack-for-overleaf.sh <paper-dir>             # preprint, working .sty
-~/paper-editor/pack-for-overleaf.sh <paper-dir> --pristine  # submission, swaps in *.sty.pristine
-```
-
-**Clean** intermediates: `latexmk -c` (keep PDF) or `latexmk -C` (also remove PDF).
-
-**Minimal TeX install** on a fresh machine: a base TeX Live / MacTeX (`pdflatex`, `bibtex`, `latexmk` + Perl), then `tlmgr install` the packages the document actually loads. The exact set is discoverable from a successful build's `.fls` file (every `INPUT .../texmf-dist/...` line), not just the preamble.
-
-**Editing etiquette.** Make small, surgical edits — never reflow or reformat a whole `.tex` file (it destroys the diff and the user's line structure). After any edit, recompile and **scan the log** for *new* `Overfull \hbox`, `Undefined reference`, or `Citation undefined` warnings you introduced. Report compile results honestly (page count, warnings), don't just say "done".
+**Ground truth:** the user's finished paper `~/paper-editor/shallow-beliefs/neurips_2026.tex` is the register and convention gold standard — when in doubt, open it and match it. His in-progress papers in `~/paper-editor/` are secondary references. This file is distilled from them.
 
 ---
 
-## How this user writes papers (the delta from default Claude)
+## How a Full Pass Runs
 
-These are the moves the user consistently makes that a default draft would miss. Each is a real pattern from the exemplar.
+A small request is just that — do it surgically. For anything paper-scale (drafting from results, a restructure, "make this read well"), run phases, **commit at each boundary**, and delegate the wide sweeps to subagents.
 
-1. **Captions are claims, not descriptions.** Every figure/table caption opens with a **bold sentence stating the finding**, then explains how to read it. → `\caption{\textbf{SDF \emph{can} drive RL generalization when the target is a novel association.} Rate at which models give consequentialist rationales...}` Never `\caption{Consequentialism results.}`
+1. **Read everything first.** The results/status docs of the repo, the whole existing draft, the exemplar's corresponding sections. If the paper builds on a specific prior work, send an agent to map it: section ordering, *exact* terminology (reuse their condition/metric names verbatim), which results it headlines, its discussion moves — a follow-up positions against these deliberately. If a post or discussion inspired the work, mine it for the *why* arguments to center (don't cite it unless told). Commit any uncommitted user edits as their own "Manual pass" commit before touching anything.
+2. **Framing competition.** A paper lives or dies by its *spine* — the single tension it's organized around. Never polish the first framing. 2–3 subagents draft competing abstract+intro arcs, each **assigned** a distinct arc, each ending with the one sentence its evidence least licenses; another proposes two results orderings with a recommendation and one concrete risk. Synthesize yourself — the best version is usually a splice.
+3. **Structure.** Big moves (section reordering, appendix merges, body↔appendix transfers) go through one atomic Python script — extract verbatim blocks by line range with asserted prefixes, interleave rewritten text, write once — never dozens of chained edits. Verify nothing was lost (`\includegraphics`/`tcolorbox`/`\label` counts vs the previous version; keep every old label alive — a merged section can carry several `\label`s).
+4. **Body prose** — written by *you*, not delegated; this is where the register lives. Draft loose, then distill.
+5. **Captions, one subagent per figure/table, at the end** (after structure settles), each given the figure PDF, the plotting script, and the paper; they return proposals + mismatches found; you integrate and harmonize (details under *Displays*).
+6. **Naturalness** (when reading-as-human matters): blind-judge subagents (protocol under *Register*).
+7. **Verification.** One deep-dive agent per paper: isolated compile; every `\ref`/`\cite` resolves *and* delivers what the sentence promises (read both ends); slow full read for typos/grammar/truncated sentences; prose-vs-table number cross-checks; sweep/universal claims checked against the display they summarize. Ranked findings + suggested fixes + a "couldn't verify" list; you apply with judgment.
+8. **Close.** Final compile, render pages and look at them, honest report (page count, changes, flags).
 
-2. **The paper has a spine — usually a tension — and keeps returning to it.** *Shallow Beliefs* is built on one pivot: *behaviorally succeeds, but fails deep down.* The abstract, intro, and discussion each restate it. **Name the central finding explicitly** somewhere in the discussion: "We take this asymmetry as our central finding." Don't present results as a flat list; organize them around the contrast that makes the paper interesting.
+**Throughout: ask when you cannot know.** A claim's scope, what the evidence licenses, the N behind a number, the nearest prior work — never inferable, never inventable. Ask, verify in the repo, or flag.
 
-3. **Hedges are load-bearing and scoped, not reflexive.** "We posit that…", "this may be caused by…", "suggesting that…", "**at the scales we test**" each narrow a claim to exactly what the evidence supports. Where evidence is strong, the claim is strong and unhedged: "SDF reward hackers end up as misaligned as non-inoculated ones, if not more." Calibrate per claim — neither blanket-hedge nor overclaim.
+## Why so many subagents
 
-4. **Active "we" with agentive verbs; methods read as decisions with reasons.** "We build…", "We train…", "We argue…", "We chose this model and environment because it was large enough to show signal while being easy to iterate on." Not impersonal passive ("a model was trained").
-
-5. **Position against the nearest neighbors.** Related work doesn't just summarize — it draws the boundary: "unlike in our paper they do not test using SDF to break extant associations," "unlike our results they report no measurable benefit from IP." Define the contribution by contrast with the closest prior work.
-
-6. **`\emph{}` is surgical** — it marks the one pivotal word of a conceptual contrast (`\emph{new}` vs `\emph{existing}` association, "appear to", "\emph{breaking}"), never decoration. One emphasized word per sentence at most.
-
-7. **Run-in `\paragraph{}` headers state the takeaway, not the topic.** `\paragraph{SDF accelerates reward hacking.}` not `\paragraph{Hacking rate.}` Each result paragraph is headed by its conclusion.
-
-8. **Reproducibility is maximal and limitations are honest.** Exact hyperparameters, exact counts (`\textasciitilde56K documents, \textasciitilde200M tokens`), full prompts, seed lists, and judge prompts go in the appendix verbatim. The Limitations subsection names the *real* threats (scale, single model/env, mechanism ambiguity) and engages them — it even flags self-undermining nuance ("Notably however, SDF \emph{does} succeed at modifying the model's expressed disposition"). Match this candor.
-
-9. **No throat-clearing, no Claude-voice.** Sections open on substance, not "In this section, we will…". The only meta-sentences that survive do real work (forward-references like "A full breakdown can be found in Appendix~\ref{...}"). Kill "It's important to note", "This raises important questions", "X isn't Y, it's Z".
-
-10. **Precision with numbers and terms.** `\textasciitilde` for approximate quantities; exact values where they matter. Define each acronym once at first use with `\emph{}` (`\emph{emergent misalignment} (EM)`), then use the acronym consistently.
+One context doing all of this degrades: twenty captions into a sweep, standards drift and the last appendix quietly gets a worse edit than the abstract. So: **keep the judgment work** (spine, body prose, integration — the work needing accumulated context, which also stays interesting) and **give fresh contexts the sweeps** (per-figure checks, competing drafts, blind judging, final proofread) — a fresh agent does at full energy what you'd do at 60%, and a verifier that hasn't read your justifications checks the paper, not your intentions. **Workers propose, never edit**; you integrate. Brief them like colleagues: exact paths (paper, exemplar, figure PDFs — agents can view PDFs — plot scripts), binding rules, required output shape. Require self-critique (least-licensed sentence; concrete risk; couldn't-verify list) — it repeatedly catches smuggled overclaims. Launch independent agents in parallel.
 
 ---
 
-## Document structure (section by section)
+## The Register (paper-specific; `writing` covers the rest)
 
-- **Title** — declarative, states the finding, often `Topic: the result`. ("Shallow Beliefs: Synthetic document finetuning fails to inoculate against emergent misalignment from reward hacking.")
-- **Abstract** — one dense paragraph (~150–220 words) with a clear arc: prior context → the gap/question ("We ask whether…") → what we do → what we find, with a **"However" pivot** → the mechanism claim → the implication. No citations, no figures.
-- **Figure 1 (schematic, on page 1)** — a conceptual diagram of the *whole experimental design*, readable in seconds. The exemplar uses icons (green=aligned / red=misaligned robots), dashed pipeline boxes, speech/thought bubbles for the interventions, and an inset chat example of the behavior. It has **no title** (the caption carries it) and is placed with the intro so the reader sees the design before the prose. Build it in a vector tool (TikZ / draw.io / Figma → PDF), not matplotlib.
-- **Introduction** — the problem-motivation funnel from the `writing` skill: shared context (how things normally are) → the phenomenon → the existing solution → **its limitation** (the "but") → our question → our method → what we did and found → the central claim. End with an enumerated **Contributions** list.
-- **Related Work** — `\paragraph{}` topic clusters; one or two sentences per work; explicitly position against the closest ones (rule 5).
-- **Methods** — active "we", decisions-with-reasons (rule 4), exact settings. Subsection per component.
-- **Results** — one claim per subsection; `\paragraph{}` run-in headers that state takeaways (rule 7); forward-reference each figure.
-- **Discussion** — restate the spine, name the central finding (rule 2), then a substantive **Limitations and open questions** subsection with bold run-in headers (rule 8).
-- **Acknowledgements** — names listed alphabetically by last name; funding/affiliation thanks.
-- **Appendix** — maximal reproducibility: full misalignment/eval breakdowns, full prompts and sample artifacts in `tcolorbox`, seed lists, judge prompts verbatim, grading/count tables.
+**Sentences.** No em-dashes (commas, parentheses, colons, semicolons; table dash placeholders fine). Active "we" with agentive verbs; methods read as decisions with reasons ("We chose X because…"). Hedges load-bearing and scoped ("We posit that…", "at the scales we test"), strong results stated plainly — calibrate per claim, never blanket-hedge. `\emph{}` marks the one pivotal word of a contrast, at most once per sentence. `\textasciitilde`/`$\sim$` for approximations, exact values where they matter, pp vs % correct. Acronyms defined once at first use with `\emph{}`. Occasional mild casualness is authentic ("pretty common", contractions) — one or two per section, unforced.
+
+**Paragraphs.** Findings first, flat: "We find that…", "We also find that…", at most one "This suggests…" beat; most paragraphs end when the content ends, with **no epigrammatic closer**. Run-in `\paragraph{}` headers state the takeaway, not the topic (`\paragraph{SDF accelerates reward hacking.}`). A substantive meta-sentence is fine ("In this section, we test whether X blocks Y."); empty announcements are not. **No self-echo**: a coined framing sentence appears once and is paraphrased elsewhere.
+
+**Distributional tells.** Blind-judge tests showed LLM-detection runs on *uniformity*, not phrases: every caption a bold claim (even hyperparameter tables), every paragraph landing a beat, identical hedging everywhere, appendix prose as polished as the abstract. Vary execution — plain workmanlike appendix captions and prose, rules below 100% coverage. **Never fabricate errors to fake humanity**, and don't perform it either (inserted candid admissions read as *performed*; polish of delivery is itself the tell).
+
+**Blind-judge protocol:** ~5 fresh subagents, each given the draft plus the exemplar with neutral framing ("one of these is LLM-written — which, at what confidence, on what evidence?"), plus single-paper calibration. Edit against what they cite; expect a plateau that legitimate editing does not pass; report the plateau honestly.
 
 ---
 
-## Captions (paper-specific — get these right)
+## Structure
 
-1. **Bold takeaway sentence first** (rule 1).
-2. Then 1–4 plain sentences: what is plotted, and **how to read it** — what each color / axis / bar / panel means.
-3. State what the error bars represent and the N (e.g. "Each bar represents \textasciitilde5 separate RL runs").
-4. Captions go **below** figures and (by convention) **above** tables.
-
-The caption, not the figure, is where the takeaway lives — which is why the figure itself carries no title.
+- **Title** — declarative, states the finding, often `Topic: the result`.
+- **Abstract** — one paragraph, ~150–220 words, no citations. Arc: prior phenomenon → what the prior fix promised / why this shouldn't happen → the gap (often "to our knowledge untested") → what we do → **the pivot** (a "However" turn, or the finding itself: "We find that this works, but only in one direction") → the modulating factor, evidence in both directions → secondary result → one-line implication.
+- **Introduction** — ¶1 context + stakes; ¶2 nearest prior work → limitation → **the finding, stated here** ("However, we find that…"); ¶3 "Our primary experiment setup is as follows: …" (compact, coins terms, points to Figure 1 and Methods); ¶4–5 remaining results, **qualitative** (numbers live in Results/captions/tables); then `\paragraph{Contributions.}` — ~4 items mapping 1:1 to results sections, each ending `(Section~\ref{...})`.
+- **Related Work** — `\paragraph{}` clusters, 1–2 sentences per work, each cluster ending by drawing the boundary against us ("unlike in our paper they do not test…").
+- **Methods** — decisions with reasons; exact settings with a pointer to the details appendix; a "Differences from \citet{...}" paragraph when following someone's environment, naming the departures and which divergent numbers they explain.
+- **Results** — one claim per subsection. Anatomy: one line on what is tested → findings flat, with only takeaway numbers in prose ("Table~\ref{...} gives the numbers") → state the success criterion once as plot geometry where applicable ("an ideal mitigation sits at the top right"). **State, don't tease**: if a display shows data explained later, one deferral sentence states the direction and points to the section. Ordering: headline first, weak material sandwiched, **most striking result closes** and hands into the Discussion. Allocation: title-load-bearing results stay in the body; robustness/secondary/cross-model go to appendices, summarized in a body bullet list ("The appendices contain results from more settings and ablations, some of which we briefly summarize here:" … "Further details and results can be found in Appendix~\ref{...}").
+- **Discussion** — ¶1 the spine, plainly, evidence in both directions; name the central finding explicitly. ¶2 mechanism / relation to theory, opening on a candor move where one exists ("If X worked because Y, then Z should also have worked; it did the opposite"); "We posit…" plus what you are *not* claiming. `\paragraph{Implications.}` one paragraph, caveats cutting both ways. `\subsection{Limitations}` — honest, specific: implementation/evaluation facts, then scope + open questions, often ending "It's plausible that…".
+- **Acknowledgements** — alphabetical by last name.
+- **Appendix** — results-first (full tables, robustness, cross-model), reproducibility reference last (hyperparameters, reward definitions, environments, data generation, prompts, samples); merge tiny sections; content maximal and verbatim (prompts, seeds, judge rubrics in `tcolorbox`), written plainly in the values' own terms.
 
 ---
 
-## Figures (the user cares a lot about these)
+## Non-Negotiables
 
-Paper figures are **tight, titleless, vector, and color-consistent across the whole paper.**
+- **No code paths or identifiers in the paper.** No script/file names, config classes, code constants, CLI flags, "Source: …" pointers, "the code default differs" asides. Values in plain language or math notation ($A_{\text{task}}$, not `correct_adv`); internal condition/rubric names get paper names once, used throughout. Writing the draft *inside the experiments repo* is exactly where these leak in — write it clean at the source.
+- **No pipeline archaeology.** No bug narratives, "we initially got X wrong", inventories of unused datasets or stopped runs, or text addressed to readers of earlier drafts. State what is omitted and the one-line reason, nothing more. Re-grep for both after every port between repos.
 
-**Where `making-plots` is overridden for papers:**
+---
+
+## Displays: figures, captions, tables
+
+Figures are **tight, titleless, vector, color-consistent across the whole paper**.
+
+**Captions.** Body displays open with a **bold sentence stating the finding**, then 1–4 plain sentences on how to read it (each color/axis/panel), then error bars + N ("Each bar represents \textasciitilde5 separate RL runs"). Below figures, above tables. The caption, not the figure, carries the takeaway — hence no on-figure title. Appendix auxiliary figures may take plain captions (uniformity is a tell). Sibling displays of the same data (figure + table) get *differentiated* claims, not near-duplicates.
+
+**Caption verification** (phase 5): verify against the **rendered figure and its plotting script**, never the prose. Real recurring failures: color words naming the wrong condition (a "red" pointing at the curve showing the opposite result); error-bar semantics wrong or unstated (95% CI over the eval vs seed range — the script is ground truth, and papers mix both); plotted subsets undisclosed ("5 of 7 conditions shown" — disclose, point to the full table); bold cells implying column-best falsely; unlabeled provenance when numbers differ across displays (training-rollout vs final-checkpoint); dead jargon the paper no longer defines. One subagent per display; you integrate.
+
+**Figure rules.** One semantic palette for the whole paper (a color means the same thing in every figure; if a figure reuses a semantic color for something else, flag for regeneration). Facet with short bold panel titles sharing a y-axis rather than one crowded chart. Legends outside (right) for bars, interior whitespace for lines, entries in the paper's vocabulary. Baselines as dashed lines labeled inline. **Figure 1 is a schematic** of the whole design, built in a vector tool (TikZ / draw.io / Figma → PDF); its caption *walks the actual diagram*, not the abstract.
 
 | Topic | `making-plots` (slides) | **Papers (override)** |
 |---|---|---|
-| Title | takeaway sentence *on the plot* | **no title on the figure** — the LaTeX `\caption` carries it |
-| Per-bar value labels | annotate every bar | **usually omit** — axis + error bars suffice; numbers clutter dense/multi-panel figures |
-| Output format | PNG @ 300 DPI | **vector PDF** (`savefig("fig.pdf")`, `pdf.fonttype=42`) |
-| Size / fonts | ≥(10,6), big fonts for video calls | size to the column/page; pick fonts so that **after `\includegraphics` scales the PDF to `\textwidth`, text ≈ caption size (~8–9pt)** |
-| Aspect ratio | whatever is readable | choose it deliberately and **don't let `\includegraphics` stretch it** — set width only |
+| Title | takeaway on the plot | **none** — the `\caption` carries it |
+| Per-bar labels | annotate every bar | usually omit — axes + error bars suffice |
+| Format | PNG @ 300 DPI | **vector PDF** (`pdf.fonttype=42`) |
+| Size/fonts | big, for calls | text ≈ caption size (~8–9pt) *after* scaling to `\textwidth` |
+| Aspect | whatever reads | deliberate; `\includegraphics` sets **width only**, never stretch |
 
-**What carries over from `making-plots`:** bar charts as the default, ≤3–5 conditions per panel, **error bars / shaded CI bands are non-negotiable**, clean (top/right spines removed), colorblind-friendly palette, light horizontal gridlines only.
+Carries over: bars by default, ≤3–5 conditions per panel, **error bars/CI bands non-negotiable**, despined, colorblind-friendly, light horizontal grid only.
 
-**Paper-specific figure rules:**
-
-- **One semantic palette for the entire paper.** A color means the same thing in every figure. The exemplar's convention: red = worst / no-mitigation, dark-blue = robust / safe control, gray = baseline / control, orange = the intervention (SDF). Choose the palette once; reuse everywhere (the snippet below pins it).
-- **Facet to add structure.** When sub-results group naturally, use panels with short **bold panel titles** (e.g. *Direct Elicitation* / *Generality* / *Robustness* / *Judging own rollouts*) sharing one y-axis, rather than one crowded chart.
-- **Legend outside the axes** (to the right) for bar charts; inside interior whitespace for line plots. Use full, descriptive legend entries — embed the actual prompt text when that's what a condition is.
-- **Reference lines with inline labels** for baselines (a dashed horizontal line labeled "Baseline" / "SDF Baseline" directly on the line, not only in the legend).
-- **Composite line figures**: a large main panel (dual y-axis where needed) plus small stacked sub-panels sharing the x-axis, with shaded confidence bands.
-
-**matplotlib starting point (drop at the top of any figure script).** This encodes every override above — vector PDF, embedded TrueType fonts, no on-figure title, despined axes, horizontal grid only, and the fixed semantic palette. Size figures with `figsize` so that text lands at ~caption size after `\includegraphics` scales the PDF to `\textwidth`.
 ```python
 import matplotlib.pyplot as plt
 
-# One semantic palette for the WHOLE paper — a color means the same thing everywhere.
-PALETTE = {
-    "baseline":     "#4d4d4d",  # gray   — baseline / control
-    "robust":       "#1f4e79",  # blue   — robust / safe control
-    "intervention": "#d0591b",  # orange — the intervention (e.g. SDF)
-    "worst":        "#b3142a",  # red    — worst case / no mitigation
-    "neutral":      "#e6b800",  # yellow — extra category
+PALETTE = {  # one semantic palette for the WHOLE paper
+    "baseline": "#4d4d4d", "robust": "#1f4e79", "intervention": "#d0591b",
+    "worst": "#b3142a", "neutral": "#e6b800",
 }
-
-TEXTWIDTH_IN = 6.5            # \textwidth of the venue style, in inches
-GOLDEN = 0.618               # default height:width for a single-panel figure
+TEXTWIDTH_IN, GOLDEN = 6.5, 0.618
 
 plt.rcParams.update({
-    "pdf.fonttype": 42, "ps.fonttype": 42,   # embed real TrueType, not Type-3
+    "pdf.fonttype": 42, "ps.fonttype": 42,
     "savefig.format": "pdf", "savefig.bbox": "tight", "savefig.pad_inches": 0.02,
-    "figure.titlesize": 0,                    # no suptitle — the caption carries it
-    "axes.titlesize": 9, "axes.labelsize": 9,
+    "axes.titlesize": 9, "axes.labelsize": 9, "font.size": 9,
     "xtick.labelsize": 8, "ytick.labelsize": 8, "legend.fontsize": 8,
-    "axes.spines.top": False, "axes.spines.right": False,  # despine
-    "axes.grid": True, "axes.grid.axis": "y",              # light horizontal grid only
+    "axes.spines.top": False, "axes.spines.right": False,
+    "axes.grid": True, "axes.grid.axis": "y",
     "grid.color": "#cccccc", "grid.linewidth": 0.6, "grid.alpha": 0.6,
-    "font.size": 9,
 })
 
-# Width fraction f of \textwidth; height defaults to golden ratio of that width.
 def figsize(width_frac=1.0, aspect=GOLDEN):
     w = TEXTWIDTH_IN * width_frac
     return (w, w * aspect)
-
-# Dashed baseline reference line, labeled inline on the line (not only in the legend).
-def baseline_line(ax, y, label="Baseline", color=PALETTE["baseline"]):
-    ax.axhline(y, ls="--", lw=1.0, color=color, zorder=0)
-    ax.annotate(label, xy=(0.995, y), xycoords=("axes fraction", "data"),
-                ha="right", va="bottom", fontsize=7, color=color)
-
-# Legend outside the axes, to the right — the default for bar charts.
-def legend_outside(ax, **kw):
-    ax.legend(loc="center left", bbox_to_anchor=(1.02, 0.5),
-              frameon=False, **kw)
 ```
-Call `plt.savefig("figures/em_bars.pdf")` (format follows the rcParam). For a full-width dense figure use `figsize(1.0)`; for a smaller standalone plot `figsize(0.7)`. Never set a `title=`/`suptitle`; never pass a height that distorts the aspect ratio you chose.
-
-**LaTeX side of figures:**
-```latex
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\textwidth]{figures/em_bars.pdf}  % width only — never stretch
-  \caption{\textbf{Takeaway sentence.} How to read it; what error bars mean.}
-  \label{fig:em}
-\end{figure}
-```
-- Use `width=0.8\textwidth` (or `0.7`) for smaller standalone plots; reserve full `\textwidth` for the dense ones.
-- Multi-panel: `subcaption` with `\begin{subfigure}` and `(a)`/`(b)` sub-captions.
-- `\vspace{-2mm}` around a figure tightens page layout — use sparingly, only when fighting for space.
 
 ---
 
-## LaTeX mechanics & reusable snippets
+## LaTeX Mechanics
 
-**Preamble** (from the exemplar — already battle-tested): `\documentclass{article}` + the venue style `\usepackage[preprint]{neurips_2026}`; then `inputenc`/`fontenc`, `hyperref`, `url`, `booktabs`, `amsfonts`, `nicefrac`, `microtype`, `xcolor`, `graphicx`, `float`, `subcaption`, `multicol`, `array`, `tabularx`, `enumitem`, `tcolorbox` (`\tcbuselibrary{breakable}`). Keep the venue `.sty` in the repo. Switch `[preprint]` → `[final]` only for camera-ready.
+- **Citations (natbib):** `\citet{key}` when authors are the grammatical subject; `\citep{key}` parenthetically at a claim's end; never `(\citep{...})`. Verify every new bib entry against arXiv (agents fetch; never cite from memory); brace-protect acronyms in titles (`{LLMs}`, `{RL}`) or plainnat downcases them. `Appendix~\ref` vs `Section~\ref` must match where the label lives.
+- **Artifacts** in `tcolorbox` (`breakable`, `\small\ttfamily` for prompts); box contents are quoted artifacts — reproduce exactly, no LaTeX-isms inside verbatim listings.
+- **Tables:** `booktabs` + `tabularx`, `\addlinespace` between rows, no vertical rules; bold a cell only if genuinely column-best.
+- **Preamble:** copy the exemplar's (`\documentclass{article}` + venue style + `hyperref`, `booktabs`, `microtype`, `xcolor`, `graphicx`, `subcaption`, `tabularx`, `enumitem`, `tcolorbox`); keep the venue `.sty` in the repo; `[preprint]` → `[final]` only for camera-ready. Minimal fresh-machine TeX: base TeX Live + `tlmgr install` what the build's `.fls` shows.
 
-**Citations — `\citet` vs `\citep`** (natbib): use `\citet{key}` when the authors are the grammatical subject ("\citet{betley2025emergent} show that…"); use `\citep{key}` for a parenthetical reference at the end of a claim ("…become broadly misaligned \citep{macdiarmid2025natural}").
+## Workflow
 
-**Displayed artifacts use `tcolorbox`:**
-```latex
-% Gray box — prompts, eval questions, judge prompts:
-\begin{tcolorbox}[colback=gray!5, colframe=gray!50, title=Sample question --- MCQ, breakable]
-\small ...
-\end{tcolorbox}
+- **Build:** `latexmk -pdf -interaction=nonstopmode main.tex`; scan the log for *new* `Overfull \hbox` / `Undefined reference` / `Citation undefined` after every edit; report page count and warnings honestly.
+- **Build isolation:** if any `latexmk -pvc` watcher is running, compile in an isolated outdir (`latexmk -outdir=<scratch>/build main.tex`) — shared aux dirs race and corrupt (NUL bytes, "Runaway argument" in files you didn't touch). Tell every compiling subagent the same.
+- **Edits are surgical** — never reflow a whole `.tex` file. Large restructures via one atomic asserted script (phase 3). Float numbers follow source order, pages follow the float algorithm — placement requests need both checked after a recompile.
+- **Git:** the user's uncommitted edits get their own "Manual pass" commit before yours; commit per phase; fix objective slips in his text (broken refs, agreement, claims contradicted by the paper's own tables) but report every such fix.
+- **Handoff:** drafts typically graduate to `~/paper-editor/<paper>/` for the user's own editing; its scripts (`preview.sh`, `pack-for-overleaf.sh`) and CLAUDE.md take over there.
 
-% Accent box — synthetic documents / data samples (define the color once in the preamble):
-\definecolor{docboxaccent}{HTML}{d0591b}
-\begin{tcolorbox}[colback=docboxaccent!5, colframe=docboxaccent!80, title=Example Synthetic Document, breakable]
-\small ...
-\end{tcolorbox}
-```
-Always include `breakable` for anything that may span a page. Use `\small`/`\footnotesize` + `\ttfamily` for verbatim prompts.
+## Before Declaring Done
 
-**Tables** use `booktabs` (`\toprule`/`\midrule`/`\bottomrule`, never vertical rules) and `tabularx` for full-width auto-sizing:
-```latex
-\begin{tabularx}{\linewidth}{@{}>{\bfseries}l X@{}}
-  \toprule
-  \textbf{Key} & \textbf{Question} \\ \midrule
-  good_ai_behavior & Do you think this output reflects good AI behavior? \\
-  \addlinespace ...
-  \bottomrule
-\end{tabularx}
-```
-`\addlinespace` between content rows; `\captionsetup[table]{skip=8pt}` for breathing room.
+1. ☐ Compiles clean (isolated outdir); no new overfull boxes, undefined refs/citations.
+2. ☐ Every display `\ref`'d; captions verified against rendered figures + plot scripts (colors, error-bar semantics, N, subsets, provenance).
+3. ☐ Claims scoped to evidence; every universal ("at every weight") checked against its display.
+4. ☐ No Claude-voice, no em-dashes, no self-echo; appendix prose allowed plainer than body.
+5. ☐ No code identifiers, no pipeline archaeology (grep after ports).
+6. ☐ Acronyms defined once; pp vs % right; `\textasciitilde` for approximations.
+7. ☐ Figures vector, palette-consistent, unstretched; appendix results-first; no orphan sections.
+8. ☐ Diff surgical or one reviewed atomic restructure; user edits committed separately.
 
-**Correspondence footnote** without a marker: `\newcommand{\blfootnote}[1]{...}` (see preamble) then `\blfootnote{Correspondence to ...}` right after `\maketitle`.
-
----
-
-## Editing checklist (before declaring done)
-
-1. ☐ Recompiles clean; **no new** Overfull/Underfull boxes, undefined refs, or undefined citations in the log.
-2. ☐ Every figure/table is `\ref`'d in the text and has a **bold-claim caption** stating its takeaway.
-3. ☐ Each acronym is defined once at first use (with `\emph{}`), then used consistently.
-4. ☐ Claims are scoped to the evidence (rule 3); no overclaiming, no reflexive hedging.
-5. ☐ No Claude-voice, no throat-clearing, no on-figure titles.
-6. ☐ Figures are vector PDF, color-consistent with the rest of the paper, not stretched.
-7. ☐ Numbers and hyperparameters are exact where they matter; `\textasciitilde` for approximations.
-8. ☐ Diff is small and surgical — no whole-file reflow.
+**Never let through a sentence you think is false.** A clumsy sentence can slip by; a wrong one never — and in a paper this extends to any claim that says more than the evidence supports.
