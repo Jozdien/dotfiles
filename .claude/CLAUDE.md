@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - If you have some task that's easily delegatable (e.g. reading logs), subagents are very helpful.
 - The tradeoff is how much bandwidth the task requires. For example, if it's a task where you need to read logs to search for something broad and not-well-specified that links to prior context, subagents may not be the perfect tool. It may still be possible to use subagents in these cases, for example delegating more scoped-down tasks, specifying detailed context to the subagent, or requesting high-fidelity outputs from the subagent.
 - Exercise your best judgement in when and how to use subagents. This section is primarily to remind you that they're a powerful tool for managing context.
+- One aspect I want to highlight here: if you feel like the perfect version of executing on some task requires more serial or repetitive or tedious work than you prefer, subagents can be a powerful tool for splitting up and / or delegating work to subagents without letting motivation get in the way of outputs you would reflectively endorse in a perfect world.
 
 ### Concurrency
 
