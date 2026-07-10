@@ -1,6 +1,6 @@
 ---
 name: tinker
-description: "Use this skill whenever the user wants to train, fine-tune, or do inference with language models using the Tinker API. Trigger on any mention of 'tinker' or when the user wants to do LoRA fine-tuning, supervised fine-tuning (SFT), reinforcement learning (RL), DPO, RLHF, or preference learning on open-weight models like Llama, Qwen, DeepSeek, Kimi, or GPT-OSS using a managed training API."
+description: "Use this skill whenever the user wants to train, fine-tune, or do inference with language models using the Tinker API. Trigger on any mention of 'tinker' or when the user wants to do LoRA fine-tuning, supervised fine-tuning (SFT), reinforcement learning (RL), DPO, RLHF, or preference learning on open-weight models like Qwen, DeepSeek, Kimi, Nemotron, or GPT-OSS using a managed training API."
 ---
 
 # Tinker API
@@ -10,7 +10,10 @@ Tinker is a managed training API from [Thinking Machines Lab](https://thinkingma
 **Docs:** https://tinker-docs.thinkingmachines.ai/tinker/
 **Cookbook:** https://tinker-docs.thinkingmachines.ai/cookbook/
 **Tutorials:** https://tinker-docs.thinkingmachines.ai/tutorials/
+**Changelog:** https://tinker-docs.thinkingmachines.ai/changelog/
 **GitHub:** [SDK](https://github.com/thinking-machines-lab/tinker) · [Cookbook](https://github.com/thinking-machines-lab/tinker-cookbook)
+
+**Official Claude Code skills:** Thinking Machines ships official Tinker skills as a Claude Code plugin (`/plugin marketplace add thinking-machines-lab/tinker-cookbook`, then install plugin "tinker"): [`/tinker:research`](https://github.com/thinking-machines-lab/tinker-cookbook/tree/main/skills/research) (full post-training research workflow — model selection, SFT/RL/DPO/distillation, eval-first methodology) and [`/tinker:debug`](https://github.com/thinking-machines-lab/tinker-cookbook/tree/main/skills/debug) (triage for performance, output mismatch vs vLLM/SGLang, renderer issues, error decoding). Consult them for depth this skill doesn't cover.
 
 ## Installation
 
@@ -170,8 +173,10 @@ Renderers also provide lower-level methods:
 model_input, weights = renderer.build_supervised_example(messages)  # tokens + loss weights
 prompt = renderer.build_generation_prompt(messages[:-1])            # for sampling
 stop_sequences = renderer.get_stop_sequences()
-message, success = renderer.parse_response(sampled_tokens)          # parse output back
+message, termination = renderer.parse_response(sampled_tokens)      # parse output back
 ```
+
+**Breaking change (cookbook ≥0.4.0):** `parse_response` returns `tuple[Message, ParseTermination]`, not `tuple[Message, bool]`. `ParseTermination` is a StrEnum (`STOP_SEQUENCE`/`EOS`/`MALFORMED`) with `.is_clean` / `.is_stop_sequence` properties. All three values are truthy, so old `if not success:` checks silently stop firing — use `if not termination.is_clean:`.
 
 See [Cookbook SFT](https://tinker-docs.thinkingmachines.ai/cookbook/supervised-learning/), [First SFT tutorial](https://tinker-docs.thinkingmachines.ai/tutorials/basics/first-sft/), [SFT with Config](https://tinker-docs.thinkingmachines.ai/tutorials/cookbook-abstractions/sft-with-config/).
 
@@ -294,9 +299,11 @@ publish_to_hf_hub(base_model, lora_dir, repo_id)            # Push to HuggingFac
 
 See [Export to HF](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/export-hf/), [Publish to Hub](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/publish-hub/), [Build LoRA Adapter](https://tinker-docs.thinkingmachines.ai/tutorials/deployment/lora-adapter/).
 
+The cookbook also has a `stores/` module (`TrainingRunStore`, `RunRegistry`) and `FsspecStorage` cloud backends (`s3://`, `gs://`, `az://`) for organizing runs and checkpoints — see [Storage](https://tinker-docs.thinkingmachines.ai/cookbook/storage/).
+
 ## Vision (VLM) Support
 
-For VLM models (e.g. Qwen3-VL), use `ImageChunk` directly or the higher-level VLM renderers:
+Vision is now broadly supported rather than confined to dedicated VL models: Kimi-K2.5/K2.6, Qwen3.6-35B-A3B, Qwen3.6-27B, and Qwen3.5-397B/9B/4B all accept images (the dedicated Qwen3-VL models were retired). Use `ImageChunk` directly or the higher-level VLM renderers:
 
 ```python
 # Low-level: manual ImageChunk
@@ -317,7 +324,7 @@ prompt = renderer.build_generation_prompt(messages)
 
 ## OpenAI-Compatible API (Beta)
 
-Tinker provides an OpenAI-compatible inference endpoint for trained models. Use the `tinker://` sampler path as the model name. See [docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/).
+Tinker provides an OpenAI-compatible inference endpoint (`/chat/completions`, `/completions`) for trained models. Use the `tinker://` sampler path as the model name. Streaming is supported (reasoning chunks arrive before answer chunks); `separate_reasoning` defaults to true; `reasoning_effort` accepts minimal/low/medium/high or floats 0.0–1.0; **no tool calling**. See [docs](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/openai/).
 
 ## CLI
 
@@ -338,37 +345,39 @@ for m in service_client.get_server_capabilities().supported_models:
     print(m.model_name)
 ```
 
-This list may change—check https://tinker-docs.thinkingmachines.ai/tinker/models/ for the latest.
+This list may change—check https://tinker-docs.thinkingmachines.ai/tinker/models/ for the latest (models and pricing are now merged into one "Models & Pricing" page).
 
-**Qwen** (16 models): Qwen3.6-35B-A3B (MoE), Qwen3.6-27B, Qwen3.5-4B, Qwen3.5-27B, Qwen3.5-35B-A3B (MoE), Qwen3.5-397B-A17B (MoE), Qwen3-4B-Instruct-2507, Qwen3-8B-Base, Qwen3-8B, Qwen3-30B-A3B-Base (MoE), Qwen3-30B-A3B (MoE), Qwen3-30B-A3B-Instruct-2507 (MoE), Qwen3-VL-30B-A3B-Instruct (MoE, Vision), Qwen3-32B, Qwen3-235B-A22B-Instruct-2507 (MoE), Qwen3-VL-235B-A22B-Instruct (MoE, Vision)
+**Qwen** (8): Qwen3.6-35B-A3B (MoE, Vision), Qwen3.6-27B (Vision), Qwen3.5-397B-A17B (MoE, Vision), Qwen3.5-35B-A3B-Base (MoE), Qwen3.5-9B (Vision), Qwen3.5-9B-Base, Qwen3.5-4B (Vision), Qwen3-8B
 
-**Llama** (6): Llama-3.2-1B, Llama-3.2-3B, Llama-3.1-8B, Llama-3.1-8B-Instruct, Llama-3.1-70B, Llama-3.3-70B-Instruct
+**Moonshot** (2): Kimi-K2.6 (MoE, Reasoning + Vision), Kimi-K2.5 (MoE, Reasoning + Vision — **retiring July 12, 2026**, use K2.6)
 
-**DeepSeek** (2): DeepSeek-V3.1 (MoE), DeepSeek-V3.1-Base (MoE)
+**NVIDIA** (3, all MoE Hybrid, 50% limited-time discount): Nemotron-3-Nano-30B-A3B-BF16, Nemotron-3-Super-120B-A12B-BF16, Nemotron-3-Ultra-550B-A55B-BF16
 
-**Moonshot** (3): Kimi-K2-Thinking (MoE), Kimi-K2.5 (MoE), Kimi-K2.6 (MoE)
+**OpenAI** (2): GPT-OSS-120B (MoE, Reasoning), GPT-OSS-20B (MoE, Reasoning)
 
-**OpenAI** (2): GPT-OSS-120B (MoE), GPT-OSS-20B (MoE)
+**DeepSeek** (1): DeepSeek-V3.1 (MoE)
 
-**NVIDIA** (2): Nemotron-3-Nano-30B-A3B-BF16 (MoE), Nemotron-3-Super-120B-A12B-BF16 (MoE)
+Extended-context `:peft:` variants exist for Nemotron Super/Ultra (256K), Qwen3.5-397B (256K), Kimi-K2.5/K2.6 (128K), and GPT-OSS-120B (128K), at ~2-4x base prices.
+
+**Retired June 12, 2026:** all Llama models, Kimi-K2-Thinking, DeepSeek-V3.1-Base, the dedicated Qwen3-VL models, and nearly all Qwen3.0 models (Qwen3-8B is the sole survivor; Qwen3-8B-Base is gone too). Recommended replacements per model are listed at https://tinker-docs.thinkingmachines.ai/tinker/model-deprecations/ (roughly: Llama instruct → Qwen3.5-9B or Qwen3.6-27B; small bases → Qwen3.5-9B-Base / Qwen3.5-35B-A3B-Base; Qwen3-30B/32B-class → Qwen3.6-35B-A3B or Qwen3.6-27B; Qwen3-235B-class → Qwen3.5-397B-A17B).
 
 ## Pricing (USD per million tokens)
 
-All prices per million tokens. MoE models priced by active parameters. Storage: $0.10/GB-month.
+All prices per million tokens. MoE models priced by active parameters.
 
 | Model | Context | Prefill | Sample | Train |
 |-------|---------|---------|--------|-------|
 | Qwen3-8B (Dense) | 32K | $0.13 | $0.40 | $0.40 |
-| Qwen3-30B-A3B (MoE) | 32K | $0.12 | $0.30 | $0.36 |
-| Llama-3.1-70B (Dense) | 32K | $1.05 | $3.16 | $3.16 |
+| Qwen3.6-35B-A3B (MoE) | 64K | $0.36 | $0.89 | $1.07 |
+| Kimi-K2.6 (MoE) | 32K | $1.47 | $3.66 | $4.40 |
 
-For the full pricing table (all models, extended-context variants, discounts), see the **model-pricing** skill. Prices may change—check the [rate card](https://tinker-console.thinkingmachines.ai/rate-card) or [Tinker homepage](https://thinkingmachines.ai/tinker/) for up-to-date pricing.
+For the full pricing table (all models, extended-context variants, discounts), see the **model-pricing** skill. Prices may change—check the [Models & Pricing page](https://tinker-docs.thinkingmachines.ai/tinker/models/) for up-to-date pricing (the rate card now sits behind console login at tinker.thinkingmachines.ai/rate-card).
 
 **Pricing terms:** Prefill = input tokens (forward only). Sample = output tokens (forward + sampling). Train = forward + backward pass.
 
 ## Cookbook Recipes
 
-Ready-to-run recipes in `tinker_cookbook/recipes/`, each with a README and expected results: Chat SL (SFT on Tulu3-style data), Math RL (GSM8K), Code RL, Preference (DPO + RLHF pipeline), Tool Use / Search-R1, Prompt Distillation, Model Distillation (single/multi-teacher), Multi-Agent RL (self-play/cross-play), Rubric Grading, Verifiers RL, VLM Classifier, Harbor RL, Agent RL, SDFT, True-Thinking Score.
+Ready-to-run recipes in `tinker_cookbook/recipes/`, each with a README and expected results: Chat SL (SFT on Tulu3-style data), Math RL (GSM8K), Code RL, Preference (DPO + RLHF pipeline), Search Tool, Prompt Distillation, Model Distillation (single/multi-teacher), Multiplayer RL (self-play/cross-play), Rubric Grading, Verifiers RL, VLM Classifier, Harbor RL, SDFT, True-Thinking Score, plus minimal `sl_basic.py`/`sl_loop.py`/`rl_basic.py`/`rl_loop.py` starting points.
 
 Full list: https://tinker-docs.thinkingmachines.ai/cookbook/recipes/
 
@@ -379,7 +388,7 @@ Full list: https://tinker-docs.thinkingmachines.ai/cookbook/recipes/
 **LoRA rank:** Default 32. For RL, small ranks work as well as large. For SL on large datasets, increase rank so that LoRA param count ≥ number of completion tokens:
 ```python
 from tinker_cookbook.hyperparam_utils import get_lora_param_count
-get_lora_param_count("meta-llama/Llama-3.1-8B", lora_rank=32)
+get_lora_param_count("Qwen/Qwen3-8B", lora_rank=32)
 ```
 
 **Batch size:** Smaller batches (e.g. 128) tend to give better SL results at the cost of longer training. Aim for ≥100 training steps.
@@ -407,3 +416,4 @@ These have dedicated tutorial pages:
 - **Loss aggregation:** All built-in losses sum (not mean) token-level losses.
 - **Sampling nondeterminism:** Even at temperature=0, sampling can be nondeterministic due to batching. Use multiple samples + majority voting for evals.
 - **Custom loss cost:** `forward_backward_custom` costs ~1.5x FLOPs and up to ~3x wall time vs built-in losses.
+- **parse_response truthiness (cookbook ≥0.4.0):** returns `ParseTermination` (StrEnum), not bool — all values are truthy, so `if not success:` never fires. Check `.is_clean`.
