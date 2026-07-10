@@ -17,6 +17,7 @@
   "model": "fable",
   "effortLevel": "high",
   "fastMode": true,
+  "tui": "fullscreen",
   "showThinkingSummaries": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true
