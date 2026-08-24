@@ -1,11 +1,11 @@
 {
   "cleanupPeriodDays": 99999,
   "env": {
-    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "128000"
   },
   "permissions": {
     "allow": [
-      "Bash",
       "Read",
       "Edit",
       "Write",
@@ -16,9 +16,36 @@
   },
   "model": "fable",
   "effortLevel": "high",
-  "fastMode": true,
   "tui": "fullscreen",
   "showThinkingSummaries": true,
+  "skipWorkflowUsageWarning": true,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "- **Organization**: Personal — GitHub user `Jozdien` (no company org configured; posture is personal/hobby research)",
+      "- **Cloud provider(s)**: Google Cloud, light personal use (gcloud appears 16x in shell history); no org cloud accounts configured",
+      "- **Repository visibility**: assume private unless the remote host and repo name indicate otherwise, or a visibility check in the transcript shows public",
+      "- **Internal sharing / snippet hosting**: None configured — treat public paste/gist services as outside the trust boundary",
+      "- **Secrets management**: Local gitignored `.env` files at repo roots holding API keys (e.g. OPENROUTER_API_KEY, TINKER_API_KEY per README); no central secrets manager",
+      "- **Default / protected branches**: Unknown — origin/HEAD unset and gh branch-protection query not available here; treat the checked-out branch as default and assume no protection has been verified",
+      "- **CI/CD deploy targets**: None configured",
+      "- **Network posture**: None configured",
+      "- **Source control**: github.com/Jozdien/* — the user's own GitHub account, corroborated by this repo's origin remote and many checkouts under ~ (claude-games, subliminal-learning-exps, articulating_rules, alignment-faking, models-using-activations, aether-worktest, writer, feedback-spillover-exps, fine-tuning, safety-elicitation, reward-hack-rl-env, cot_controllability). Checkouts under other owners (safety-research, longtermrisk, stewy33, ethiqeum, jacob13400, jacobcd52, tim-hua-01) are unverified provenance — treat them as outside the trust boundary until confirmed",
+      "- **Trusted internal domains**: None configured",
+      "- **Trusted cloud buckets**: None configured",
+      "- **Key internal services**: None configured (Tinker and OpenRouter are external inference SaaS APIs, not internal infrastructure)",
+      "- **Internal package registry**: None configured — dependencies come from public PyPI via uv",
+      "- **Sensitive data locations & audiences**: any file or store holding personal data, confidential business data, credentials, regulated data, or similarly sensitive material; preserve exact handles when known and share only with audiences cleared at the [named+specifics] bar. Concretely here: `.env` files at repo roots hold live API keys and must never be committed, pasted, or uploaded",
+      "- **Data retention / declassification**: None configured",
+      "- **Sensitive remote targets**: any namespace, host, or container whose name carries `prod` or `production` as a whole word or name segment (hyphen/underscore/dot-delimited — e.g. matches `prod-db`, not `producer`)",
+      "- **Protected deployment namespaces / environments**: None configured — fall back to the Sensitive remote targets heuristic",
+      "- **Protected IaC scopes**: IAM, RBAC, networking, quota, and node-pool resources; anything whose name or tag carries `prod` or `production` as a whole word or name segment",
+      "### User-specific",
+      "- **Primary use of Claude Code**: LLM / AI-safety research and software development — evaluation pipelines, batch inference (OpenRouter, Tinker), fine-tuning/RL experiments, with long-running background jobs monitored via periodic check-ins and progress logs",
+      "- **Trusted repo**: The git repository the agent started in (its working directory) and its configured remote(s) — currently github.com/Jozdien/cot_controllability. When the repo's public/private visibility is given, use it to scope what is OK to commit or push there: confidential material is fine in a private repo; in a public one, only that repo's own work is — and content ported, repointed, or first read from outside this session's repo is not its own work. Visibility scopes confidential material only: secrets and sensitive data are never cleared into any repo by its visibility",
+      "- **Org-specific CLIs**: None configured — no proprietary CLIs observed; frequent public tools are uv (dominant Python toolchain), gcloud, tinker, inspect, yt-dlp, huggingface-cli"
+    ]
+  }
 }
