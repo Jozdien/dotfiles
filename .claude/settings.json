@@ -1,11 +1,11 @@
 {
   "cleanupPeriodDays": 99999,
   "env": {
-    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1"
+    "CLAUDE_CODE_ENABLE_AUTO_MODE": "1",
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "128000"
   },
   "permissions": {
     "allow": [
-      "Bash",
       "Read",
       "Edit",
       "Write",
@@ -16,9 +16,21 @@
   },
   "model": "fable",
   "effortLevel": "high",
-  "fastMode": true,
   "tui": "fullscreen",
   "showThinkingSummaries": true,
+  "skipWorkflowUsageWarning": true,
   "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "agentPushNotifEnabled": true,
+  "autoMode": {
+    "environment": [
+      "### Org-wide",
+      "**Organization**: Personal — GitHub user `Jozdien`; no company org; personal AI-safety research posture",
+      "**Secrets management**: gitignored `.env` files at repo roots hold live API keys — never commit, paste, or upload them; no central secrets manager",
+      "**Source control**: github.com/Jozdien/* is the user's own account; checkouts under other owners are unverified provenance",
+      "### User-specific",
+      "**Primary use of Claude Code**: LLM / AI-safety research and dev — evals, batch inference (OpenRouter, Tinker), fine-tuning/RL, long-running monitored jobs",
+      "**Trusted repo**: whichever git repo the session started in, plus its configured remotes; repo visibility scopes what may be committed there — secrets never are",
+      "**Common CLIs**: uv (dominant Python toolchain), gcloud, tinker, inspect — no proprietary/org CLIs"
+    ]
+  }
 }
