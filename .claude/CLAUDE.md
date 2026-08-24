@@ -27,6 +27,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     - Identify if there are errors in the process, and if so what they are, to fix them as early as possible
     - Sanity check early results to see if they are as expected
 
+## Communication
+
+I've found that sometimes, when you work at something for long stretches of time and then report progress to me, the reports use shorthand and/or jargon that's very familiar to you but hard to parse for me. This is understandable: you were trained on environments prioritizing communication with yourself or other AIs, and when you work at something on your own for a while it's useful to develop such shorthand. But clear communication (e.g. to me) is very important for me to able to provide valuable input and overall direction steering (which is where I slot into a project). So whenever you've providing updates to me, please keep it jargon-free and accessible with low-to-medium context (while keeping relevant details in). You don't have to provide updates like this often, only when a thread completes or if I ask for it explicitly (or if there's some other intermediate point that you determine this to be particularly valuable for).
+
 ## Guidelines for writing code
 
 When making a new codebase from scratch (or fully refactoring an existing codebase), here are some useful heuristics:
