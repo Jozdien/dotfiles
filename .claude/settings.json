@@ -14,11 +14,12 @@
     ],
     "defaultMode": "auto"
   },
-  "model": "fable",
+  "model": "opus",
   "effortLevel": "high",
   "tui": "fullscreen",
   "showThinkingSummaries": true,
   "skipWorkflowUsageWarning": true,
+  "switchModelsOnFlag": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "autoMode": {
@@ -32,5 +33,10 @@
       "**Trusted repo**: whichever git repo the session started in, plus its configured remotes; repo visibility scopes what may be committed there — secrets never are",
       "**Common CLIs**: uv (dominant Python toolchain), gcloud, tinker, inspect — no proprietary/org CLIs"
     ]
+  },
+  "modelSettings": {
+    "claude-opus-5-5": {
+      "effortLevel": "high"
+    }
   }
 }
