@@ -19,22 +19,32 @@ link_file() {
     # Ensure parent directory exists
     mkdir -p "$(dirname "$dst")"
 
+    # -n: replace an existing symlink to a directory instead of linking inside it
     if [ -L "$dst" ]; then
         # Already a symlink — update it silently
-        ln -sf "$src" "$dst"
+        ln -sfn "$src" "$dst"
     elif [ -e "$dst" ]; then
         # Real file exists — back it up first
         echo "  ⚠ Backing up existing $dst → ${dst}.bak"
         mv "$dst" "${dst}.bak"
-        ln -sf "$src" "$dst"
+        ln -sfn "$src" "$dst"
     else
-        ln -sf "$src" "$dst"
+        ln -sfn "$src" "$dst"
     fi
     echo "  ✓ $dst → $src"
 }
 
 # --- tmux --------------------------------------------------------------------
 link_file "$CONFIGS/.tmux.conf" "$HOME/.tmux.conf"
+
+# --- Shell helpers (tp: per-project tmux sessions) ---------------------------
+link_file "$CONFIGS/tp.sh" "$HOME/.tp.sh"
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && ! grep -q '\.tp\.sh' "$rc"; then
+        printf '\n[ -f ~/.tp.sh ] && . ~/.tp.sh  # dotfiles: tp tmux helper\n' >> "$rc"
+        echo "  ✓ $rc sources ~/.tp.sh"
+    fi
+done
 
 # --- Claude CLI config -------------------------------------------------------
 # We symlink individual files/dirs inside ~/.claude, NOT the whole directory,
@@ -43,12 +53,24 @@ CLAUDE_DIR="$HOME/.claude"
 CLAUDE_SRC="$SCRIPT_DIR/.claude"
 mkdir -p "$CLAUDE_DIR"
 
-# CLAUDE.md — your global instructions
-link_file "$CLAUDE_SRC/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+# CLAUDE.md — your global instructions. A real file that already imports this
+# one (e.g. a wrapper adding org instructions like Redwood's) is left alone.
+if [ -f "$CLAUDE_DIR/CLAUDE.md" ] && [ ! -L "$CLAUDE_DIR/CLAUDE.md" ] \
+    && grep -q '@~/dotfiles/.claude/CLAUDE.md' "$CLAUDE_DIR/CLAUDE.md"; then
+    echo "  ✓ $CLAUDE_DIR/CLAUDE.md imports dotfiles CLAUDE.md; leaving it"
+else
+    link_file "$CLAUDE_SRC/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+fi
 
-# Skills directory (whole dir is fine to symlink)
-if [ -d "$CLAUDE_SRC/skills" ] && [ "$(ls -A "$CLAUDE_SRC/skills" 2>/dev/null)" ]; then
-    link_file "$CLAUDE_SRC/skills" "$CLAUDE_DIR/skills"
+# Skills — link each one individually so skills installed from elsewhere
+# (e.g. Redwood's) can live alongside them in ~/.claude/skills
+if [ -d "$CLAUDE_SRC/skills" ]; then
+    # Migrate from the old layout, where the whole dir was one symlink
+    [ -L "$CLAUDE_DIR/skills" ] && rm "$CLAUDE_DIR/skills"
+    mkdir -p "$CLAUDE_DIR/skills"
+    for skill in "$CLAUDE_SRC/skills"/*/; do
+        link_file "${skill%/}" "$CLAUDE_DIR/skills/$(basename "$skill")"
+    done
 fi
 
 # settings.json — contains permissions config

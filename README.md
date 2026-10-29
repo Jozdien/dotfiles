@@ -30,13 +30,18 @@ dotfiles/
 ├── bootstrap.sh              # one-time: install tools, set up git, clone repo, call sync
 ├── sync.sh                   # repeatable: create/update symlinks
 ├── .claude/
-│   ├── CLAUDE.md             # → ~/.claude/CLAUDE.md
+│   ├── CLAUDE.md             # → ~/.claude/CLAUDE.md (unless that file already imports it)
 │   ├── settings.json         # → ~/.claude/settings.json
-│   └── skills/               # → ~/.claude/skills/
+│   └── skills/<name>/        # → ~/.claude/skills/<name> (one link per skill)
 ├── configs/
-│   └── .tmux.conf            # → ~/.tmux.conf
+│   ├── .tmux.conf            # → ~/.tmux.conf
+│   └── tp.sh                 # → ~/.tp.sh, sourced from ~/.bashrc / ~/.zshrc
 └── README.md
 ```
+
+## `tp`: per-project tmux sessions
+
+Run `tp` in a project directory (or `tp <dir>`) to attach to that project's tmux session, creating it if needed. The session name is the initials of the directory's `-`/`_`-separated words (`arch-reverse-engineer` → `are`), or the full name for a single word. Inside tmux it switches sessions instead of nesting.
 
 ## Adding a new config file
 
@@ -47,6 +52,6 @@ dotfiles/
 ## Design choices
 
 - **Symlinks, not copies**: `git pull` = instant config update, no extra sync step.
-- **Individual Claude files, not whole dir**: `~/.claude` has runtime state we don't track.
+- **Individual Claude files, not whole dir**: `~/.claude` has runtime state we don't track, and skills/instructions from other sources (e.g. Redwood's security setup) live alongside ours.
 - **Idempotent everything**: safe to run bootstrap/sync multiple times.
 - **Environment detection**: auto-detects RunPod vs GCloud vs generic Linux.
