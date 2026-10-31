@@ -20,6 +20,7 @@
   "showThinkingSummaries": true,
   "skipWorkflowUsageWarning": true,
   "switchModelsOnFlag": true,
+  "idleCompaction": false,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
   "autoMode": {
